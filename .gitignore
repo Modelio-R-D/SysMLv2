@@ -1,0 +1,8 @@
+# Nested repos — tracked independently in their own GitHub repositories
+/Modelio-API-Markdown-CHUB/
+/ModelioSaaS_ScriptServer/
+/ModelioSkill/
+
+# Local, machine-specific Claude settings
+.claude/settings.local.json
+.claude/autoaccept.on
