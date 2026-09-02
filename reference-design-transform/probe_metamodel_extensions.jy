@@ -1,0 +1,9 @@
+try:
+    mmExt = modelingSession.getMetamodelExtensions()
+    print "getMetamodelExtensions():", mmExt
+    print "dir():"
+    for m in dir(mmExt):
+        if not m.startswith("_"):
+            print "  ", m
+except Exception, e:
+    print "FAILED:", e

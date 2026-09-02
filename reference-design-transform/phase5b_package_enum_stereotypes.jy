@@ -1,0 +1,71 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+stats = {"Package": 0, "Enumeration": 0}
+
+def walk_parallel(specEl, designEl):
+    specChildren = {}
+    for c in specEl.getCompositionChildren():
+        try:
+            if c.isDeleted():
+                continue
+            mcls = c.getMClass().getName()
+            if mcls in ("Package", "Enumeration"):
+                specChildren[c.getName()] = c
+        except:
+            pass
+    for designChild in designEl.getCompositionChildren():
+        try:
+            if designChild.isDeleted():
+                continue
+            mcls = designChild.getMClass().getName()
+        except:
+            continue
+        if mcls not in ("Package", "Enumeration"):
+            continue
+        nm = designChild.getName()
+        specChild = specChildren.get(nm)
+        if specChild is None:
+            print "  WARNING: no spec counterpart for design", mcls, nm
+            continue
+        if specChild.isStereotyped(moduleName, "Semantic") and not designChild.isStereotyped(moduleName, "Semantic"):
+            designChild.addStereotype(moduleName, "Semantic")
+            stats[mcls] += 1
+        if mcls == "Package":
+            walk_parallel(specChild, designChild)
+
+tr = modelingSession.createTransaction("Phase 5b: Semantic stereotype on packages and enumerations")
+try:
+    for compName in ["SysML", "KerML"]:
+        specComp = find_child(specPkg, compName)
+        designComp = find_child(designPkg, compName)
+        walk_parallel(specComp, designComp)
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

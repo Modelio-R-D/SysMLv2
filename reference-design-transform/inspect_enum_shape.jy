@@ -1,0 +1,50 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def bfs_find_first_of_type(root, typeName, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.getMClass().getName() == typeName:
+                return el, visited
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None, visited
+
+enum, visited = bfs_find_first_of_type(specPkg, "Enumeration", max_nodes=6000)
+print "enum:", enum
+print "full dir():"
+for m in dir(enum):
+    if not m.startswith("_"):
+        print "  ", m
+print ""
+print "compositionChildren:", [(c.getName(), c.getMClass().getName()) for c in enum.getCompositionChildren()]

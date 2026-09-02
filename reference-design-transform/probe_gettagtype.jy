@@ -1,0 +1,43 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+mmExt = modelingSession.getMetamodelExtensions()
+compMClass = sysmlSpecComp.getMClass()
+print "compMClass:", compMClass, compMClass.getName()
+
+for tagName in ["isExtension", "Metamodel.isExtension"]:
+    try:
+        r = mmExt.getTagType(moduleName, tagName, compMClass)
+        print "getTagType(%r):" % tagName, r
+    except Exception, e:
+        print "getTagType(%r) FAILED:" % tagName, e
+
+try:
+    stereo = mmExt.getStereotype(moduleName, "Metamodel", compMClass)
+    print "getStereotype:", stereo
+except Exception, e:
+    print "getStereotype FAILED:", e
+
+try:
+    allTagTypes = mmExt.findTagTypes(".*", compMClass)
+    print "findTagTypes('.*', compMClass) count:", len(allTagTypes)
+    for t in allTagTypes:
+        print "  ", t.getName()
+except Exception, e:
+    print "findTagTypes FAILED:", e

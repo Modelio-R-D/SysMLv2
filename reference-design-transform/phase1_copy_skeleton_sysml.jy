@@ -1,0 +1,89 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+import json
+
+factory = modelingSession.getModel()
+
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+SKIP_MCLASSES = set(["ClassDiagram", "Note", "TaggedValue", "PackageImport"])
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sourceComp = find_child(specPkg, "SysML")
+print "sourceComp:", sourceComp
+
+classMap = {}   # name -> new class/enum uuid
+stats = {"Package": 0, "Class": 0, "Enumeration": 0, "skipped_excluded": 0, "skipped_other": 0}
+
+def copy_tree(srcEl, newParentEl):
+    for c in srcEl.getCompositionChildren():
+        try:
+            mcls = c.getMClass().getName()
+        except:
+            continue
+        if mcls in SKIP_MCLASSES:
+            stats["skipped_other"] += 1
+            continue
+        if mcls == "Package":
+            newPkg = factory.createPackage()
+            newPkg.setName(c.getName())
+            newParentEl.getOwnedElement().add(newPkg)
+            stats["Package"] += 1
+            copy_tree(c, newPkg)
+        elif mcls == "Class":
+            nm = c.getName()
+            if nm in EXCLUDED_CLASSES:
+                stats["skipped_excluded"] += 1
+                continue
+            newCls = factory.createClass(nm, newParentEl)
+            try:
+                newCls.setIsAbstract(c.isIsAbstract())
+            except:
+                pass
+            classMap[nm] = str(newCls.getUuid())
+            stats["Class"] += 1
+        elif mcls == "Enumeration":
+            nm = c.getName()
+            newEnum = factory.createEnumeration()
+            newEnum.setName(nm)
+            newParentEl.getOwnedElement().add(newEnum)
+            classMap[nm] = str(newEnum.getUuid())
+            stats["Enumeration"] += 1
+        else:
+            stats["skipped_other"] += 1
+
+tr = modelingSession.createTransaction("Phase 1: copy SysML skeleton into reference/design")
+try:
+    newSysMLComp = factory.createComponent()
+    newSysMLComp.setName("SysML")
+    designPkg.getOwnedElement().add(newSysMLComp)
+    copy_tree(sourceComp, newSysMLComp)
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+print "classMap size:", len(classMap)
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()
+
+with open("c:/Users/jcadavid/OneDrive - LA POSTE GROUPE/SysMLv2/reference-design-transform/class_map_sysml.json", "w") as f:
+    json.dump(classMap, f, indent=2, sort_keys=True)
+print "wrote class_map_sysml.json"

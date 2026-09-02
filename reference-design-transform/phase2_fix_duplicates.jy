@@ -1,0 +1,120 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+AFFECTED = ["ReturnParameterMembership", "StateUsage", "Import", "LiteralString", "Feature",
+            "MetadataAccessExpression", "RequirementConstraintKind"]
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+specByName, sv = bfs_collect(specPkg, set(["Class", "Enumeration"]))
+designByName, dv = bfs_collect(designPkg, set(["Class", "Enumeration"]))
+
+def resolve_type(srcTypeEl):
+    try:
+        nm = srcTypeEl.getName()
+    except:
+        return srcTypeEl
+    if nm in designByName:
+        return designByName[nm]
+    return srcTypeEl
+
+tr = modelingSession.createTransaction("Phase 2 fix: wipe and recopy duplicated members")
+try:
+    for name in AFFECTED:
+        designEl = designByName[name]
+        specEl = specByName[name]
+        mcls = designEl.getMClass().getName()
+
+        if mcls == "Enumeration":
+            toDelete = [c for c in designEl.getCompositionChildren() if c.getMClass().getName() == "EnumerationLiteral"]
+            print name, "- deleting", len(toDelete), "EnumerationLiteral"
+            for d in toDelete:
+                d.delete()
+            for lit in specEl.getCompositionChildren():
+                if lit.getMClass().getName() != "EnumerationLiteral":
+                    continue
+                factory.createEnumerationLiteral(lit.getName(), designEl)
+            continue
+
+        toDeleteAttrs = list(designEl.getOwnedAttribute())
+        toDeleteOps = list(designEl.getOwnedOperation())
+        print name, "- deleting", len(toDeleteAttrs), "Attribute,", len(toDeleteOps), "Operation"
+        for d in toDeleteAttrs:
+            d.delete()
+        for d in toDeleteOps:
+            d.delete()
+
+        for attr in specEl.getOwnedAttribute():
+            newAttr = factory.createAttribute()
+            newAttr.setName(attr.getName())
+            newAttr.setType(resolve_type(attr.getType()))
+            try:
+                newAttr.setMultiplicityMin(attr.getMultiplicityMin())
+                newAttr.setMultiplicityMax(attr.getMultiplicityMax())
+            except:
+                pass
+            designEl.getOwnedAttribute().add(newAttr)
+
+        for op in specEl.getOwnedOperation():
+            newOp = factory.createOperation(op.getName(), designEl)
+            for p in op.getIO():
+                newParam = factory.createParameter()
+                newParam.setName(p.getName())
+                newParam.setType(resolve_type(p.getType()))
+                newOp.getIO().add(newParam)
+            ret = op.getReturn()
+            if ret is not None:
+                factory.createReturnParameter("", resolve_type(ret.getType()), newOp)
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

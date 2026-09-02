@@ -1,0 +1,119 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+designComps, _ = bfs_collect_list(designPkg, set(["Component"]))
+designClasses, _ = bfs_collect_list(designPkg, set(["Class"]))
+designAttrs, _ = bfs_collect_list(designPkg, set(["Attribute"]))
+designEnds, _ = bfs_collect_list(designPkg, set(["AssociationEnd"]))
+print "components:", len(designComps), "classes:", len(designClasses), "attrs:", len(designAttrs), "ends:", len(designEnds)
+
+isExtTagType = mmExt.getTagType(moduleName, "Metamodel.isExtension", designComps[0].getMClass())
+structNodeTagType = mmExt.getTagType(moduleName, "Semantic.structural.node", designClasses[0].getMClass())
+
+def set_empty_tag(element, tagType):
+    newTagValue = factory.createTaggedValue()
+    newTagValue.setDefinition(tagType)
+    element.getTag().add(newTagValue)
+
+stats = {"deleted_old_tags": 0, "isExtension": 0, "structural.node": 0, "attr_semantic": 0, "end_semantic": 0}
+
+tr = modelingSession.createTransaction("Phase 5d: fix boolean tags empty, stereotype attrs+ends")
+try:
+    # Delete the previously-created (wrong-format) isExtension/structural.node tags.
+    for comp in designComps:
+        for t in list(comp.getTag()):
+            defn = t.getDefinition()
+            if defn and defn.getName() == "Metamodel.isExtension":
+                for p in list(t.getActual()):
+                    p.delete()
+                t.delete()
+                stats["deleted_old_tags"] += 1
+    for cls in designClasses:
+        for t in list(cls.getTag()):
+            defn = t.getDefinition()
+            if defn and defn.getName() == "Semantic.structural.node":
+                for p in list(t.getActual()):
+                    p.delete()
+                t.delete()
+                stats["deleted_old_tags"] += 1
+
+    # Recreate empty, matching the confirmed real archimate convention.
+    for comp in designComps:
+        set_empty_tag(comp, isExtTagType)
+        stats["isExtension"] += 1
+    for cls in designClasses:
+        set_empty_tag(cls, structNodeTagType)
+        stats["structural.node"] += 1
+
+    # Attribute and AssociationEnd Semantic stereotype, matching confirmed real spec pattern.
+    for attr in designAttrs:
+        if not attr.isStereotyped(moduleName, "Semantic"):
+            attr.addStereotype(moduleName, "Semantic")
+            stats["attr_semantic"] += 1
+    for end in designEnds:
+        if not end.isStereotyped(moduleName, "Semantic"):
+            end.addStereotype(moduleName, "Semantic")
+            stats["end_semantic"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

@@ -1,0 +1,129 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+# case number -> (primary class, secondary class), matching points-a-trancher.md point 5's table
+CASE_NUMBERS = {
+    ("Association", "Classifier"): 1,
+    ("AssociationStructure", "Structure"): 2,
+    ("Connector", "Relationship"): 3,
+    ("Flow", "Step"): 4,
+    ("Interaction", "Association"): 5,
+    ("MetadataFeature", "AnnotatingElement"): 6,
+    ("SuccessionFlow", "Succession"): 7,
+    ("ActionDefinition", "Behavior"): 8,
+    ("ActionUsage", "Step"): 9,
+    ("AssertConstraintUsage", "Invariant"): 10,
+    ("AttributeDefinition", "DataType"): 11,
+    ("BindingConnectorAsUsage", "BindingConnector"): 12,
+    ("CalculationDefinition", "Function"): 13,
+    ("CalculationUsage", "Expression"): 14,
+    ("ConnectionDefinition", "AssociationStructure"): 15,
+    ("ConnectionUsage", "ConnectorAsUsage"): 16,
+    ("ConnectorAsUsage", "Connector"): 17,
+    ("ConstraintDefinition", "Predicate"): 18,
+    ("ConstraintUsage", "BooleanExpression"): 19,
+    ("ExhibitStateUsage", "StateUsage"): 20,
+    ("FlowDefinition", "Interaction"): 21,
+    ("FlowUsage", "ConnectorAsUsage"): 22,
+    ("FlowUsage", "Flow"): 22,
+    ("IncludeUseCaseUsage", "UseCaseUsage"): 23,
+    ("ItemDefinition", "Structure"): 24,
+    ("MembershipExpose", "MembershipImport"): 25,
+    ("NamespaceExpose", "NamespaceImport"): 28,
+    ("OccurrenceDefinition", "Class"): 29,
+    ("PerformActionUsage", "EventOccurrenceUsage"): 30,
+    ("PortDefinition", "Structure"): 31,
+    ("SatisfyRequirementUsage", "AssertConstraintUsage"): 32,
+    ("SuccessionAsUsage", "Succession"): 33,
+    ("SuccessionFlowUsage", "SuccessionFlow"): 34,
+}
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+designByName, dv = bfs_collect(designPkg, set(["Class"]))
+
+stats = {"annotated": 0, "not_found": 0}
+
+tr = modelingSession.createTransaction("Phase 3k: annotate the 33 secondary-axis composed attributes with Notes")
+try:
+    for (primaryName, secName), caseNum in CASE_NUMBERS.items():
+        primaryCls = designByName.get(primaryName)
+        if primaryCls is None:
+            print "  WARNING: primary class missing:", primaryName
+            stats["not_found"] += 1
+            continue
+        attrName = secName[0].lower() + secName[1:]
+        target = None
+        for a in primaryCls.getOwnedAttribute():
+            if not a.isDeleted() and a.getName() == attrName:
+                target = a
+                break
+        if target is None:
+            print "  WARNING: composed attribute not found:", primaryName, ".", attrName
+            stats["not_found"] += 1
+            continue
+        note = factory.createNote()
+        note.setContent(
+            "Axe secondaire (cas %d, points-a-trancher.md point 5) : cette relation "
+            "n'existe pas dans reference/spec. Ajoutee lors de la transformation "
+            "reference/design pour porter l'axe delegue %s (implements %s a la main "
+            "dans le XImpl.java genere)." % (caseNum, secName, secName)
+        )
+        note.setSubject(target)
+        stats["annotated"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

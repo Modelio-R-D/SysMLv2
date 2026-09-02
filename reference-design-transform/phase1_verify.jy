@@ -1,0 +1,54 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_count(root, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    counts = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            counts[mcls] = counts.get(mcls, 0) + 1
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return counts, visited
+
+specCounts, sv = bfs_count(specPkg)
+designCounts, dv = bfs_count(designPkg)
+print "spec visited:", sv, "design visited:", dv
+print ""
+print "%-15s %10s %10s" % ("MClass", "spec", "design")
+allKeys = sorted(set(specCounts.keys()) | set(designCounts.keys()))
+for k in allKeys:
+    print "%-15s %10d %10d" % (k, specCounts.get(k, 0), designCounts.get(k, 0))

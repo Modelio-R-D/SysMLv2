@@ -1,0 +1,81 @@
+from collections import deque
+import json
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def bfs_collect(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    els = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                els.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return els, visited
+
+classes, cv = bfs_collect(specPkg, set(["Class"]))
+gens, gv = bfs_collect(specPkg, set(["Generalization"]))
+
+fromSub = {}
+for g in gens:
+    sub = g.getSubType()
+    sup = g.getSuperType()
+    if sub is None or sup is None:
+        continue
+    fromSub.setdefault(sub.getName(), []).append(sup.getName())
+
+# For classes with exactly 1 parent, record it. For >1, list all (34-case table will pick primary).
+parentMap = {}
+noParent = []
+for c in classes:
+    parents = fromSub.get(c.getName(), [])
+    parentMap[c.getName()] = parents
+    if not parents:
+        noParent.append(c.getName())
+
+print "total classes:", len(classes)
+print "classes with 0 parents:", len(noParent)
+for n in sorted(noParent):
+    print "  ", n
+
+print ""
+print "classes with 3+ parents:"
+for k, v in parentMap.items():
+    if len(v) >= 3:
+        print "  ", k, v
+
+with open("c:/Users/jcadavid/OneDrive - LA POSTE GROUPE/SysMLv2/reference-design-transform/parent_map.json", "w") as f:
+    json.dump(parentMap, f, indent=2, sort_keys=True)
+print "wrote parent_map.json"

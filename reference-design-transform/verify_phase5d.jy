@@ -1,0 +1,83 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+designAttrs, _ = bfs_collect_list(designPkg, set(["Attribute"]))
+designEnds, _ = bfs_collect_list(designPkg, set(["AssociationEnd"]))
+designComps, _ = bfs_collect_list(designPkg, set(["Component"]))
+designClasses, _ = bfs_collect_list(designPkg, set(["Class"]))
+
+attrSem = len([a for a in designAttrs if a.isStereotyped(moduleName, "Semantic")])
+endSem = len([e for e in designEnds if e.isStereotyped(moduleName, "Semantic")])
+print "attrs total:", len(designAttrs), "stereotyped Semantic:", attrSem
+print "ends total:", len(designEnds), "stereotyped Semantic:", endSem
+
+# check tag format on components/classes
+c0 = designComps[0]
+print ""
+print "sample component tags:"
+for t in c0.getTag():
+    defn = t.getDefinition()
+    nm = defn.getName() if defn else None
+    if nm == "Metamodel.isExtension":
+        print "  isExtension actual count:", len(t.getActual())
+
+nodeCount = 0
+nodeEmptyCount = 0
+for cls in designClasses[:20]:
+    for t in cls.getTag():
+        defn = t.getDefinition()
+        if defn and defn.getName() == "Semantic.structural.node":
+            nodeCount += 1
+            if len(t.getActual()) == 0:
+                nodeEmptyCount += 1
+print "sample of 20 classes: structural.node count:", nodeCount, "empty-actual count:", nodeEmptyCount
+
+print ""
+print "isDirty:", projectService.isDirty()

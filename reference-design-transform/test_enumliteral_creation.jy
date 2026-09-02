@@ -1,0 +1,58 @@
+from collections import deque
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_find_first_of_type(root, typeName, max_nodes=1000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if el.getMClass().getName() == typeName:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+testEnum = bfs_find_first_of_type(designPkg, "Enumeration")
+print "testEnum:", testEnum
+
+tr = modelingSession.createTransaction("probe enum literal creation - will rollback")
+try:
+    r = factory.createEnumerationLiteral("probeLit", testEnum)
+    print "2-arg createEnumerationLiteral SUCCEEDED:", r
+    print "owner after create:", r.getCompositionOwner()
+except Exception, e:
+    print "2-arg createEnumerationLiteral FAILED:", e
+finally:
+    tr.rollback()
+    print "rolled back probe transaction"
+
+print "dir(factory) filtered for 'iteral':"
+for m in dir(factory):
+    if 'iteral' in m:
+        print "  ", m

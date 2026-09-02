@@ -1,0 +1,62 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+archiRoot = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "archimate":
+        archiRoot = root
+        break
+
+archiComp = find_child(find_child(archiRoot, "modelio.archimate"), "metamodel")
+# metamodel package didn't directly hold it - walk to find via reference/Archimate like before
+def bfs_find_first_named(root, name, mclass, max_nodes=3000):
+    q = deque([root])
+    seen = set()
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if not el.isDeleted() and el.getName() == name and el.getMClass().getName() == mclass:
+                return el, visited
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None, visited
+
+comp, v1 = bfs_find_first_named(archiRoot, "Archimate", "Component", max_nodes=1500)
+print "visited:", v1, "Archimate component:", comp
+if comp:
+    print "tags:"
+    for t in comp.getTag():
+        defn = t.getDefinition()
+        nm = defn.getName() if defn else None
+        vals = [p.getValue() for p in t.getActual()]
+        print "  ", nm, "->", vals
+
+# find a real Semantic-stereotyped class inside it
+cls, v2 = bfs_find_first_named(comp, "Concept", "Class", max_nodes=1500)
+print ""
+print "visited:", v2, "sample class:", cls
+if cls:
+    print "tags:"
+    for t in cls.getTag():
+        defn = t.getDefinition()
+        nm = defn.getName() if defn else None
+        vals = [p.getValue() for p in t.getActual()]
+        print "  ", nm, "->", vals
