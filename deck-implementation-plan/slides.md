@@ -482,10 +482,12 @@ SysML/KerML est structurellement bien plus proche d'UML que de tout autre métam
 <div>
 
 **Le point de projet**
-- Introduire `KerMLProject extends AbstractProject`, sur le même
+- Introduire `SysMLProject extends AbstractProject`, sur le même
   patron que `Project` (UML)
-- KerML est la couche fondationnelle greffée — SysML en hérite
-  sans introduire son propre point de greffe
+- Nommé côté SysML, pas KerML : il n'y aura pas d'éditeur KerML
+  autonome, seulement un éditeur SysML v2 — KerML reste la couche
+  fondationnelle greffée en interne, mais n'a pas sa propre
+  surface de projet
 
 </div>
 </div>
