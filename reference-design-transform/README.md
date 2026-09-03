@@ -17,10 +17,15 @@ python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skelet
    source classes. Writes `class_map_sysml.json`/`class_map_kerml.json`.
 2. `phase2_copy_members.jy` — attributes, operations, enum literals.
 3. `phase3_generalizations_and_composed_attrs.jy` — real generalizations for all
-   classes (single parent each); for the 32 multi-inheritance cases, a plain
-   composed `Attribute` on the primary typed directly by the real secondary
-   class (no synthetic delegate class — see point 5), each annotated with a
-   traceability `Note`.
+   classes (single parent each); for the 32 multi-inheritance cases, a
+   composed `Association` between the primary and the real secondary class
+   (no synthetic delegate class, no plain `Attribute` — see point 5; an
+   Attribute-typed-by-a-class version was tried first and confirmed broken at
+   real SemGen/JavaDesigner generation time), each annotated with a
+   traceability `Note` on the primary-side `AssociationEnd`. Both ends get
+   the `Semantic` stereotype, `setTarget()`/`setSource()`, and the primary's
+   end gets `aggregation = composite` — validated on a disposable test
+   metamodel before being applied to the real 33 cases.
 4. `phase4_associations.jy` — associations + ends, chevauchement redirects.
    **Sets `setTarget()` explicitly on each end** — without it the GUI shows
    `<no type>` everywhere even though owner/opposite/multiplicity are correct
@@ -41,19 +46,25 @@ to run any time (read-only).
 ## `archive/`
 
 Superseded designs and one-off investigation/fix scripts, kept for history:
-two abandoned Phase-3 delegate designs (nested-flattened, then a shared
-Generalization-chain hierarchy — both replaced by the direct-typed composed
-attribute in the final `phase3_generalizations_and_composed_attrs.jy`), plus
-every `inspect_`/`probe_`/`check_`/`diagnose_`/`spotcheck_`/`test_` script used
-to discover the real Modelio API along the way. Not part of the reusable
+three abandoned Phase-3 secondary-axis designs (nested-flattened delegate,
+then a shared Generalization-chain delegate hierarchy, then a plain composed
+`Attribute` typed directly by the secondary class — all replaced by the
+composed-`Association` version in the final
+`phase3_generalizations_and_composed_attrs.jy`), plus every
+`inspect_`/`probe_`/`check_`/`diagnose_`/`spotcheck_`/`test_` script used to
+discover the real Modelio API along the way. Not part of the reusable
 pipeline — API findings from them are already folded into
 `ModelioSkill/skills/modelio/references/api-gotchas.md`.
 
 ## Known gaps (don't block generation — see `points-a-trancher.md`)
 
-- Attribute type-constraint tag (`PropertyType`) / `Value` defaults not set.
-- Association-end properties (`structural.partOf`/`isToDelete`,
-  `persistency.optional`, `Semantic.link.source`/`target`) not set — needs a
-  per-association aggregation-kind pass.
+- Attribute type-constraint tag (`PropertyType`) / `Value` defaults not set —
+  confirmed to cause real `ERROR Attribute X has no initial value` messages
+  in KerML generation, not just cosmetic; no mechanism found yet.
+- Association-end properties `structural.isToDelete`,
+  `persistency.optional`, `Semantic.link.source`/`target` not set (the
+  composed-Association secondary-axis ends already get `aggregation`/
+  `Semantic` per the validated Phase 3 recipe above; these remaining tags
+  are the doc's lower-priority ones).
 - Whether SemGen/JavaDesigner/reverse generation itself is scriptable from
   Jython (vs. GUI menu only) is untested.
