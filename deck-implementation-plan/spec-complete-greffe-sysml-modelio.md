@@ -42,21 +42,42 @@ Ce principe **chapeaute toutes les décisions de mapping** (Partie 2) : dès qu'
 
 ## Partie 2 — Chevauchements avec l'infrastructure Modelio
 
-### 2.1 Comment / Documentation → Note
+### 2.1 AnnotatingElement (Comment, Documentation, TextualRepresentation, MetadataFeature) → Note ou Constraint ?
 
-| Concept KerML | Infrastructure Modelio | Traitement proposé |
+**Rappel de la hiérarchie KerML** (`KerML::Root::Annotations`) : `AnnotatingElement` est la super-classe abstraite ; ses sous-types sont `Comment`, `Documentation`, `TextualRepresentation` et `MetadataFeature` (ce dernier traité à part en 2.3 via `MetadataUsage`). Le lien vers l'élément annoté passe par une relation `Annotation`, avec l'attribut dérivé `/annotatedElement : Element [1..*] {ordered}` — **la cardinalité multiple est portée par la super-classe `AnnotatingElement` elle-même**, donc elle s'applique à `Comment` et `Documentation` de la même façon.
+
+| Concept KerML | Candidat Modelio | Cardinalité cible | Traitement proposé |
+|---|---|---|---|
+| `Comment`, `Documentation` | `infrastructure::Note` | `Subject : ModelElement` (1 seul) | Écarté en l'état — cardinalité incompatible |
+| `Comment`, `Documentation` | `infrastructure::Constraint` | `ConstrainedElement : List<T>` (plusieurs) | Candidat retenu pour investigation — cardinalité compatible |
+
+**Deux propositions confrontées en réunion 🆕** :
+- **Juan** proposait initialement `Note` par analogie directe de rôle (élément descriptif attaché à un objet).
+- **Cédric** a objecté que `Note` ne convient pas : « Pas avec les notes [...] c'est avec les contraintes qu'on peut le faire. Et ça peut poser problème d'ailleurs. »
+
+**Vérification faite sur les fiches API Modelio (`org.modelio.metamodel.uml.infrastructure`)** :
+
+| | `Note` | `Constraint` |
 |---|---|---|
-| `Comment`, `Documentation` | `infrastructure::Note` | Mapper sur `Note` |
+| Relation vers l'élément annoté | `Subject : ModelElement` — **un seul** élément, Note **composée** dans son Subject | `ConstrainedElement : List<T extends UmlModelElement>` — **liste**, donc plusieurs éléments en une seule instance |
+| Attributs porteurs | `Content : String`, `MimeType : String` | `Body : String`, `Language : String`, `BaseClass : String` |
+| Sémantique Modelio | Élément purement descriptif (documentation libre, aucune portée formelle) | Restriction/règle exprimable (« express restrictions and relationships that cannot be expressed using UML notation »), peut porter des stéréotypes de rôle prédéfinis (pré/post-condition, invariant) |
+| Composition | Note appartient à son Subject (analogue à `Documentation` KerML : élément documenté = propriétaire) | D'après la doc API : « In Modelio, a Constraint is not made up of anything. It is only managed by specific copy/transfer rules » — pas de règle de composition simple équivalente |
 
-**Achoppements identifiés** :
-1. `Comment` a 3 formes textuelles (explicite avec `about`, implicite, avec `locale`) — `Note` devra porter la `locale` et la contrainte structurelle propre à `Documentation` (élément documenté = propriétaire).
-2. **Différence structurelle profonde, confirmée en réunion 🆕** : en SysML v2, un `Comment` peut être lié à **plusieurs éléments à la fois** (`about A, B`) ; en Modelio, une `Note` est **contenue en composition** dans l'unique élément qu'elle documente (1..1). Cédric confirme : « Pas avec les notes [...] c'est avec les contraintes qu'on peut le faire, et ça peut poser problème. » Ce n'est donc pas qu'une nuance : **un cas d'usage SysML v2 valide ne peut pas être modélisé tel quel avec l'infrastructure actuelle**.
-3. **Propriété `locale` non portée nativement 🆕** : à ajouter sur `Note`, ou fonctionnalité d'internationalisation repoussée à un cycle ultérieur — à trancher explicitement.
+**Analyse de l'arbitrage — aucun des deux candidats ne matche parfaitement** :
+- `Note` a la **bonne sémantique** (purement descriptive, pas de portée formelle) mais la **mauvaise cardinalité** (1 seul élément).
+- `Constraint` a la **bonne cardinalité** (liste d'éléments contraints) mais une **sémantique différente** : un `Constraint` Modelio induit une notion de *restriction/règle*, potentiellement interprétée par d'autres mécanismes de l'outil (génération de code, validation, stéréotypes de pré/post-condition) — ce qui ne correspond pas à l'intention d'un simple `Comment` KerML, purement informatif. C'est probablement le sens de la remarque de Cédric : « ça peut poser problème d'ailleurs » — réutiliser `Constraint` pour de la simple documentation risque de déclencher/impliquer des traitements non désirés ailleurs dans Modelio.
+- Pas de composition native connue pour `Constraint` (contrairement à `Note`/`Documentation`) — à vérifier plus précisément avant de trancher (règle de rattachement, cycle de vie, suppression en cascade).
+
+**`TextualRepresentation` 🆕** : sous-type d'`AnnotatingElement` portant `language : String [1]` et `body : String [1]` — structurellement très proche de `Comment`/`Documentation` (mêmes attributs, même cardinalité `[1..*]` sur l'élément annoté héritée de la super-classe). Aucun concept Modelio dédié identifié à ce stade ; à traiter avec la même décision que `Comment`/`Documentation` (`Note` ou `Constraint`), l'attribut `language` pouvant se rapprocher du `MimeType` de `Note` ou du `Language` de `Constraint`.
+
+**Propriété `locale`** : présente sur `Comment` et `Documentation` (optionnelle) pour l'internationalisation — non portée nativement ni par `Note` ni par `Constraint`. À ajouter quel que soit le candidat retenu, ou fonctionnalité repoussée à un cycle ultérieur.
 
 **Question à trancher** :
-- Valide-t-on le mapping `Comment/Documentation → Note` malgré la perte de multi-cible ?
-- Comment représente-t-on la liaison d'un commentaire à plusieurs éléments (duplication ? relation n-aire dédiée ?) — un développement spécifique (nouvelle vue de propriétés) est-il accepté si besoin ?
-- Supporte-t-on `locale` dès la v1 ?
+- Retient-on `Constraint` plutôt que `Note` pour héberger `Comment`/`Documentation`/`TextualRepresentation`, en acceptant le décalage sémantique (restriction formelle vs simple description) ?
+- Si `Constraint` est retenu : vérifie-t-on qu'aucun mécanisme Modelio existant (génération, validation, pré/post-condition) ne s'active par erreur sur ces instances réutilisées à des fins purement descriptives ?
+- Sinon, développe-t-on un concept dédié dans `implementation` (nouvelle métaclasse + vue de propriétés), au prix d'un effort de développement supplémentaire ?
+- Supporte-t-on `locale` dès la v1, et sur quel attribut du candidat retenu ?
 
 ### 2.2 Dependency → Dependency
 
@@ -76,11 +97,18 @@ Ce principe **chapeaute toutes les décisions de mapping** (Partie 2) : dès qu'
 
 ### 2.3 MetadataDefinition/MetadataUsage → Stereotype/TaggedValue ou PropertyTable
 
-| Concept KerML/SysML | Infrastructure Modelio | Traitement proposé |
-|---|---|---|
-| `MetadataDefinition`, `MetadataUsage` | `infrastructure::Stereotype` + `TaggedValue`, ou `PropertyTable` | Mapper sur le sous-système Stereotype/TaggedValue/PropertyTable |
+**Rappel spec SysML v2** (`8.3.27`) : `MetadataUsage extends ItemUsage, MetadataFeature` ; `MetadataFeature extends Feature, AnnotatingElement` — `MetadataUsage` hérite donc de la **même cardinalité multi-cible `[1..*]`** que `Comment`/`Documentation` (2.1), via `AnnotatingElement.annotatedElement`. `MetadataDefinition extends ItemDefinition, Metaclass` (pas d'attribut propre).
 
-**Achoppement le plus significatif des trois** : un `MetadataUsage` s'attache à plusieurs cibles à la fois en une seule instance (`about A, B, C`). En Modelio, un `Stereotype` (définition) peut être appliqué à plusieurs éléments, mais **chaque application** (`ExtensionValue`) ne concerne qu'un seul élément de base.
+| Concept KerML/SysML | Infrastructure Modelio | Cardinalité cible côté Modelio | Traitement proposé |
+|---|---|---|---|
+| `MetadataDefinition`, `MetadataUsage` | `infrastructure::Stereotype` + `TaggedValue`/`TagType` | `TaggedValue.Annoted : ModelElement` (1 seul) | Mapper sur le sous-système Stereotype/TaggedValue |
+| `MetadataDefinition`, `MetadataUsage` | `infrastructure.properties::PropertyTableDefinition` + `TypedPropertyTable` | `PropertyTable.Owner : ModelElement` (1 seul, hérité par `TypedPropertyTable`) | Mapper sur le sous-système PropertyTable |
+
+**Achoppement le plus significatif des trois — confirmé et précisé par vérification API 🆕** : un `MetadataUsage` s'attache à plusieurs cibles à la fois en une seule instance (`about A, B, C`). **Aucun des deux mécanismes Modelio candidats n'est multi-cible** :
+- `Stereotype` (définition) peut être appliqué à plusieurs éléments, mais **chaque application** (`ExtensionValue`) ne concerne qu'un seul élément de base.
+- `TaggedValue.Annoted` et `PropertyTable.Owner` sont tous deux typés `ModelElement` (singulier, pas de liste) — vérifié sur les fiches API (`org.modelio.metamodel.uml.infrastructure` et `.properties`).
+
+**Constat transversal avec la section 2.1 🆕** : sur les **trois** concepts `AnnotatingElement` étudiés (`Comment`, `TextualRepresentation`, `MetadataUsage`), tous héritent de la cardinalité multi-cible `[1..*]` en KerML/SysML, et **tous les mécanismes Modelio candidats identifiés à ce jour sont mono-cible** (`Note.Subject`, `TaggedValue.Annoted`, `PropertyTable.Owner`), **à l'exception de `Constraint.ConstrainedElement` (liste)**. Cela pose la question de fond : faut-il traiter la perte de multi-cible comme un compromis accepté (cas par cas, un mapping différent par concept), ou existe-t-il un principe commun (ex. Constraint généralisé, ou développement d'un mécanisme n-aire dédié) applicable aux trois cas ?
 
 **Arbitrage IHM/technique détaillé en réunion 🆕** :
 - Cédric précise qu'il y a un **choix technique interne** à trancher : TaggedValue/TagType (mécanisme historique, non typé — que du `String`) **vs** PropertyTable (mécanisme plus récent, permettant des tables typées via des `Definition`).
@@ -265,8 +293,8 @@ Cf. Partie 3.3 — généraliser la pratique à **tous** les concepts couverts p
 | 2 | Responsable du mapping texte ↔ modèle | Partie 0 | Critique |
 | 3 | Renommage `KerML::Element` → `KerMLModelElement extends ModelElement` | 1.1 | Normale |
 | 4 | `SysMLProject extends AbstractProject`, pas de surface KerML | 1.2 | Normale |
-| 5 | Mapping `Comment/Documentation → Note` malgré perte multi-cible | 2.1 | Critique |
-| 6 | Support de `locale` sur Note dès la v1 | 2.1 | Normale |
+| 5 | Arbitrage `Comment/Documentation/TextualRepresentation → Note` (bonne sémantique, mauvaise cardinalité) ou `Constraint` (bonne cardinalité, sémantique de restriction formelle) | 2.1 | Critique |
+| 6 | Support de `locale` dès la v1, sur le candidat retenu | 2.1 | Normale |
 | 7 | Alias `Dependency`, décomposition n-aire → binaire(s) | 2.2 | Normale |
 | 8 | `PropertyTable` (pas TaggedValue) pour `MetadataDefinition/Usage` | 2.3 | Critique |
 | 9 | Vue IHM dédiée « Metadata » pour ne pas perdre l'utilisateur | 2.3 | Normale |
