@@ -1,0 +1,59 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_find_first_named(root, name, mclass, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getName() == name and el.getMClass().getName() == mclass:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+enum = bfs_find_first_named(designPkg, "RequirementConstraintKind", "Enumeration")
+stray = None
+for c in enum.getCompositionChildren():
+    if c.getMClass().getName() == "EnumerationLiteral" and not c.isDeleted() and c.getName() == "":
+        stray = c
+print "stray literal:", stray, stray.getUuid() if stray else None
+
+tr = modelingSession.createTransaction("Fix: delete stray unnamed EnumerationLiteral")
+try:
+    if stray is not None:
+        stray.delete()
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

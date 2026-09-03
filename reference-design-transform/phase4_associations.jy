@@ -181,6 +181,12 @@ try:
         newEnd2 = make_end(e2, newOwner2)
         newEnd1.setOpposite(newEnd2)
         newEnd2.setOpposite(newEnd1)
+        # setTarget() is a separate, explicitly-stored field - NOT derived from
+        # setOpposite()/getCompositionOwner(). Without this, the GUI shows every
+        # end as "<no type>" even though owner/opposite/multiplicity are all
+        # correct (found live this session - see api-gotchas.md Error 28).
+        newEnd1.setTarget(newOwner2)
+        newEnd2.setTarget(newOwner1)
         newAssoc = factory.createAssociation()
         newEnd1.setAssociation(newAssoc)
         newEnd2.setAssociation(newAssoc)

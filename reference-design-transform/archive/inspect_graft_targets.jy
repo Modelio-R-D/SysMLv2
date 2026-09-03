@@ -1,0 +1,76 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_find_first_named(root, name, mclass, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getName() == name and el.getMClass().getName() == mclass:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+# 1. Check Element (design side) - current state, generalizations pointing at it
+elementCls = bfs_find_first_named(designPkg, "Element", "Class")
+print "Element (design):", elementCls
+print "  isAbstract:", elementCls.isIsAbstract()
+print "  owner:", elementCls.getCompositionOwner().getName()
+print "  own attrs:", [a.getName() for a in elementCls.getOwnedAttribute() if not a.isDeleted()]
+print "  own ops:", [o.getName() for o in elementCls.getOwnedOperation() if not o.isDeleted()]
+
+# 2. Confirm ModelElement (infra) UUID still resolvable the same way
+platformRoot = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "platform.core":
+        platformRoot = root
+        break
+infraPath = ["modelio.platform.core", "metamodel", "infrastructure", "Infrastructure", "infrastructure metamodel", "uml", "infrastructure"]
+infraPkg = platformRoot
+for name in infraPath:
+    infraPkg = find_child(infraPkg, name)
+modelElementCls = find_child(infraPkg, "ModelElement")
+abstractProjectCls = find_child(infraPkg, "AbstractProject")
+print ""
+print "ModelElement (infra):", modelElementCls, modelElementCls.getUuid() if modelElementCls else None
+print "AbstractProject (infra):", abstractProjectCls, abstractProjectCls.getUuid() if abstractProjectCls else None
+
+# 3. Does SysMLProject already exist anywhere in design?
+sysmlProjectCls = bfs_find_first_named(designPkg, "SysMLProject", "Class")
+print ""
+print "SysMLProject already exists in design:", sysmlProjectCls
+
+# 4. Check real UML Project class for the "extends AbstractProject" pattern citation
+umlRoot = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "uml":
+        umlRoot = root
+        break
+projectCls = bfs_find_first_named(umlRoot, "Project", "Class") if umlRoot else None
+print ""
+print "real UML Project class (pattern reference):", projectCls

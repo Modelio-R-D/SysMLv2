@@ -1,0 +1,75 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+ends, ev = bfs_collect_list(designPkg, set(["AssociationEnd"]))
+print "total design AssociationEnd:", len(ends)
+
+noOwner = 0
+noOpposite = 0
+oppositeNoOwner = 0
+sample_shown = 0
+for e in ends:
+    owner = e.getCompositionOwner()
+    opp = e.getOpposite()
+    if owner is None:
+        noOwner += 1
+    if opp is None:
+        noOpposite += 1
+    elif opp.getCompositionOwner() is None:
+        oppositeNoOwner += 1
+    if sample_shown < 5:
+        print "end name=%r owner=%s opposite=%s oppositeOwner=%s" % (
+            e.getName(),
+            owner.getName() if owner else None,
+            opp.getName() if opp else None,
+            opp.getCompositionOwner().getName() if (opp and opp.getCompositionOwner()) else None,
+        )
+        sample_shown += 1
+
+print ""
+print "ends with no composition owner:", noOwner
+print "ends with no opposite:", noOpposite
+print "ends whose opposite has no owner (= 'untyped' from the GUI's perspective):", oppositeNoOwner

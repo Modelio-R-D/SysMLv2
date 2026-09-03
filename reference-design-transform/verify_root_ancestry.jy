@@ -1,0 +1,100 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect_list(root, mclasses, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+allClasses, cv = bfs_collect_list(designPkg, set(["Class"]))
+allGens, gv = bfs_collect_list(designPkg, set(["Generalization"]))
+print "design classes:", len(allClasses), "generalizations:", len(allGens)
+
+parentOf = {}
+for g in allGens:
+    sub = g.getSubType()
+    sup = g.getSuperType()
+    if sub is None:
+        continue
+    # a class might have >1 generalization only if something went wrong - track all
+    parentOf.setdefault(sub.getUuid(), []).append(sup)
+
+def find_ultimate_roots(cls, maxDepth=30):
+    """Walk up via parentOf; return the set of names reached that have no further parent."""
+    visited = set()
+    roots = set()
+    stack = [(cls, 0)]
+    while stack:
+        cur, depth = stack.pop()
+        if cur.getUuid() in visited or depth > maxDepth:
+            if depth > maxDepth:
+                roots.add("MAX_DEPTH_" + cur.getName())
+            continue
+        visited.add(cur.getUuid())
+        parents = parentOf.get(cur.getUuid(), [])
+        if not parents:
+            roots.add(cur.getName())
+        else:
+            for p in parents:
+                stack.append((p, depth + 1))
+    return roots
+
+rootCounts = {}
+multiParent = []
+for c in allClasses:
+    parents = parentOf.get(c.getUuid(), [])
+    if len(parents) > 1:
+        multiParent.append((c.getName(), [p.getName() for p in parents]))
+    roots = find_ultimate_roots(c)
+    key = tuple(sorted(roots))
+    rootCounts.setdefault(key, []).append(c.getName())
+
+print ""
+print "classes with >1 direct real generalization (should be none - the multi-inheritance cases were resolved):", len(multiParent)
+for m in multiParent:
+    print "  ", m
+
+print ""
+print "ultimate root(s) reached, grouped:"
+for rootSet, names in rootCounts.items():
+    print "  ROOT =", rootSet, "-> %d classes" % len(names)
+    if len(names) <= 5:
+        print "    ", names
