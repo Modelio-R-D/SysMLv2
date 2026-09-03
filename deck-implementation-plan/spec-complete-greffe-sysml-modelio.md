@@ -81,19 +81,23 @@ Ce principe **chapeaute toutes les décisions de mapping** (Partie 2) : dès qu'
 
 ### 2.2 Dependency → Dependency
 
+**Rappel spec KerML** (`8.3.2.2.2`) : `Dependency.client : Element [1..*]` **et** `Dependency.supplier : Element [1..*]` — les deux côtés sont des listes (relation **n-aire** : capable de relier plusieurs clients à plusieurs fournisseurs en une seule instance, ex. `dependency A, B to X, Y, Z;`). Une relation **binaire**, par opposition, ne relie jamais que 2 éléments (1 source, 1 cible) — c'est la limite de Modelio ici.
+
 | Concept KerML | Infrastructure Modelio | Traitement proposé |
 |---|---|---|
-| `Dependency` | `infrastructure::Dependency` | Alias direct |
+| `Dependency` | `infrastructure::Dependency` | Alias direct sur l'interface **de base**, pas une spécialisation |
 
 **Achoppements identifiés** :
-1. Le `Dependency` Modelio peut porter des comportements/stéréotypes hérités du contexte UML — à vérifier qu'aucun ne s'applique par erreur à un lien KerML.
-2. **Pas de support n-aire côté Modelio, confirmé en réunion 🆕** : KerML permet `dependency X to Y, Z;` (un client, plusieurs fournisseurs en une seule relation). Modelio ne représente qu'un lien binaire. Cédric : « On supporte pas ça [le n-aire]. On a sabré, simplifié. » Antonin : « Tu traduis par 2 dépendances chez nous, faut voir ça comme ça » (`X→Y` et `X→Z`).
+1. **Vérifié 🆕** : le `Dependency` de base Modelio ne porte **aucun stéréotype UML appliqué par défaut** — il est sémantiquement neutre (juste la mécanique générique de traçabilité/analyse d'impact : `getDependsOnDependency()`, `getImpactedDependency()`, réutilisable sans risque). En revanche, Modelio implémente les « saveurs » classiques de dépendance UML (`Usage`, `Abstraction`, `ElementRealization`, `Substitution`, `MethodologicalLink`…) comme des **métaclasses concrètes distinctes** héritant de `Dependency`, chacune ajoutant sa propre sémantique (mapping spécification/implémentation, substituabilité runtime, sémantique pilotée par stéréotype externe). **Le risque réel n'est donc pas sur `Dependency` lui-même, mais sur le point de greffe exact** : il faut s'assurer que l'alias cible précisément l'interface `Dependency` de base, et non l'une de ses spécialisations qui importeraient des notions étrangères à KerML.
+2. **Pas de support n-aire côté Modelio, confirmé en réunion 🆕** : toute la famille `Dependency` de Modelio est **strictement binaire des deux côtés** (`Dependency`, `Abstraction`, `Usage`, `MethodologicalLink`, `ElementRealization` — tous limités à 1 client/1 fournisseur). Cédric : « On supporte pas ça [le n-aire]. On a sabré, simplifié. » Antonin : « Tu traduis par 2 dépendances chez nous, faut voir ça comme ça » (`X→Y` et `X→Z`).
+
+**Précédent trouvé dans l'infrastructure confirmant cette approche 🆕** : `ComponentRealization` (« un Component peut être réalisé par plusieurs Classifiers ») résout exactement ce même problème de multiplicité — non pas via une liste sur l'attribut (`RealizingClassifier` reste singulier), mais en laissant le Component **posséder plusieurs instances `ComponentRealization`**, chacune pointant vers un seul Classifier. C'est le patron exact de la décomposition n-aire → plusieurs binaires déjà proposée pour `Dependency`.
 
 **Point non résolu 🆕** : cette décomposition n-aire → binaire doit être assurée par un traducteur (probablement au niveau du parsing textuel). Reste à clarifier :
 - Qui implémente ce parseur (équipe Modelio vs équipe parsing, cf. Bilal) ?
 - La transformation est-elle réversible pour un roundtrip modèle → texte → modèle sans perte ?
 
-**Question à trancher** : valide-t-on l'alias direct et la stratégie de décomposition n-aire → binaire(s) ?
+**Question à trancher** : valide-t-on l'alias direct sur l'interface `Dependency` de base (pas une spécialisation) et la stratégie de décomposition n-aire → binaire(s), sur le précédent `ComponentRealization` ?
 
 ### 2.3 MetadataDefinition/MetadataUsage → Stereotype/TaggedValue ou PropertyTable
 
@@ -138,27 +142,38 @@ Relecture des 19 classes du package `infrastructure` face aux 182 classes de `re
 
 **Constat** : 34 classes de `reference` ont deux (ou trois) super-types directs — impossible à traduire tel quel en Java.
 
-**Proposition** : pour chaque cas, l'axe **Definition/Usage** gagne `extends` ; l'autre axe devient une interface `mm.api`, implémentée par délégation à un objet interne portant son état (« Behavior »). Approche alignée sur *Replace Inheritance with Delegation* / *Role Object* (Fowler) et sur le flattening EMF/Ecore.
+**Historique — deux approches essayées et abandonnées 🆕** :
+1. *Interface `mm.api` à double `extends` + délégué interne (« Behavior »)* — proposition initiale (Fowler, *Replace Inheritance with Delegation*). Abandonnée : reproduire fidèlement la hiérarchie réelle de l'axe secondaire dans chaque délégué obligeait soit à dupliquer tous les attributs/opérations hérités (classes énormes), soit à construire une hiérarchie fantôme parallèle d'une quarantaine de classes `XxxBehavior` — coût de maintenance jugé disproportionné pour un problème purement outillage.
+2. *Attribut composé typé directement par la vraie classe secondaire* (ex. `AttributeDefinition.dataType : DataType` en attribut) — plus simple sur le papier, mais **confirmé en échouant à la génération réelle SemGen + Java Architect 🆕** : un attribut `Semantic` ne peut être typé que par un type Java primitif restreint (cf. 4.2), jamais par une autre métaclasse.
 
-**Contrainte technique bloquante, révélée en réunion 🆕** : Cédric confirme que **SemGen rejette (bloque) tout métamodèle contenant un héritage multiple réel**, y compris à titre intermédiaire dans les interfaces `mm.api` si elles sont générées avec 2 `extends`. Antonin nuance : la solution de délégation systématique proposée par Juan **ne peut pas être appliquée mécaniquement partout** — le cas des sous-classes qui utiliseraient elles-mêmes un des deux axes délégués complique la désambiguïsation (pas de solution générique universelle, seulement du cas par cas).
+**Solution retenue et validée par génération réelle 🆕 — association composée vers la vraie classe secondaire** : pour chaque cas, l'axe **Definition/Usage** gagne `extends` (axe primaire) ; l'autre axe est modélisé comme une **relation d'agrégation composite** entre la classe primaire et **la vraie métaclasse secondaire elle-même** (pas de délégué synthétique) — stéréotype `Semantic` aux deux bouts, composition côté primaire. Validée d'abord sur un métamodèle jetable, puis appliquée aux 33 cas réels dans `reference/design` : génération SemGen + Java Architect propre, sans erreur. Chaque association composée porte une `Note` signalant qu'elle résulte de la résolution d'un héritage multiple et n'existe pas dans `reference/spec`.
 
-**Conséquence pratique 🆕** : le script de transformation `reference → implementation` (Partie 4) doit produire des classes avec un seul `extends` réel + des `implements` d'interfaces déléguées — jamais une classe/interface avec double `extends` — pour rester compatible avec SemGen tel qu'il existe aujourd'hui.
+**Contrainte technique à l'origine de ce choix, révélée en réunion 🆕** : Cédric confirme que **SemGen rejette (bloque) toute métaclasse portant un héritage multiple réel** dans le modèle, y compris pour la seule interface `mm.api`. Il n'y a donc pas de marge : la métaclasse ne doit physiquement plus porter qu'une seule généralisation, quelle que soit la solution retenue pour représenter l'axe secondaire — l'association composée n'est pas qu'une préférence de conception, c'est la seule voie compatible avec SemGen tel qu'il existe aujourd'hui.
+
+**Avantage confirmé sur les cas en cascade 🆕** : contrairement au pattern délégué (qui obligeait à chaîner des objets `Behavior` synthétiques à la main), la cascade est désormais **gratuite** — la classe secondaire réelle (ex. `Association` pour le cas 5) porte déjà sa propre association composée pour son propre cas (ex. `Classifier`), donc la navigation se fait par simple chaîne d'appels sur des objets réels (`getInteraction().getAssociation().getClassifier()`), sans rien construire de spécial pour les cas 5, 15, 16, 21, 32, 34.
+
+**Compromis assumé à documenter — perte de substituabilité polymorphique Java 🆕** : avec ce patron, une classe comme `AttributeDefinition` n'*est plus* un `DataType` au sens Java (pas d'`instanceof`, pas de passage en paramètre typé `DataType`, pas de collection `List<DataType>` qui la contiendrait implicitement) — elle *a* un `DataType`, accessible via un accesseur dédié (ex. `getDataType()`). Tout algorithme qui reposerait sur une polymorphie générique de l'axe secondaire (recherche de tous les `DataType` du modèle, vérifications de type génériques) devra explicitement passer par cet accesseur. **À vérifier avant généralisation** : existe-t-il aujourd'hui, ou dans les besoins de l'équipe parsing (Bilal, cf. 5.2), des algorithmes qui présupposent cette polymorphie ? Si oui, prévoir une convention de nommage uniforme des accesseurs pour limiter la friction.
+
+**Point de vigilance UX 🆕** : l'instance composée est un vrai élément persisté (propre identité, propre place dans l'arbre de composition). À trancher : faut-il la masquer dans les vues standard de l'explorateur de modèle Modelio pour éviter qu'un utilisateur SysML v2 final ne voie apparaître un enfant technique (ex. un `DataType` sous chaque `AttributeDefinition`) sans rapport avec son intention de modélisation — même famille de risque que la remarque de Fadwa en 2.3 sur `PropertyTable`/Metadata ?
+
+**Conséquence pratique sur le script 🆕** : le script de transformation `reference → implementation` (Partie 4) doit produire, pour chaque cas, une classe avec un seul `extends` réel (axe primaire) + une association composite vers la vraie classe secondaire (jamais un second `extends`/`implements`, jamais de classe déléguée synthétique) — stéréotype `Semantic` aux deux bouts, conformément aux conventions déjà décrites en 4.2.
 
 **Question à trancher** : 
-- Valide-t-on le principe général de délégation comme règle par défaut, en acceptant qu'il faille une revue cas par cas (pas un algorithme 100 % automatique) ?
-- Le script doit-il détecter/avertir sur les cas où le pattern générique ne suffit pas (sous-classes des axes délégués) ?
+- Valide-t-on ce patron (association composée vers la vraie classe secondaire) comme règle par défaut pour les 34 cas ?
+- Valide-t-on une convention de nommage uniforme pour les accesseurs de la facette secondaire (ex. nommés d'après le type secondaire) ?
+- Décide-t-on de masquer ou non ces associations techniques dans les vues utilisateur standard de Modelio ?
 
-### 3.2 Piste d'évolution outillage 🆕 (non tranchée)
+### 3.2 Piste d'évolution outillage 🆕 (largement caduque pour ce besoin)
 
-Juan propose de **contribuer à SemGen** pour qu'il applique automatiquement le pattern de délégation plutôt que de traiter les 34 cas à la main. Antonin/Cédric ouverts au principe mais posent la question de la pertinence/du coût : « Est-ce que c'est pertinent de le faire ? Faudra qu'on décide. »
+Juan proposait initialement de **contribuer à SemGen** pour qu'il applique automatiquement un pattern de délégation plutôt que de traiter les 34 cas à la main. **Mise à jour 🆕** : le patron d'association composée retenu en 3.1 fonctionne avec SemGen **tel qu'il existe aujourd'hui**, sans aucune évolution outillage nécessaire — cette piste perd donc l'essentiel de son intérêt pour ce besoin précis. Elle pourrait rester pertinente pour d'autres métamodèles futurs présentant un héritage multiple, mais n'est plus un prérequis ni une urgence pour ce projet.
 
-**Question à trancher** : investit-on du temps dans une évolution de SemGen (bénéfice : futurs métamodèles), ou traite-t-on les 34 cas manuellement pour ce projet (plus rapide à court terme) ?
+**Question à trancher** : maintient-on cette piste dans le backlog long terme (bénéfice : futurs métamodèles), ou l'abandonne-t-on complètement puisque le blocage initial est résolu autrement ?
 
 ### 3.3 Les 34 résolutions individuelles
 
-Cas 1–7 : noyau KerML. Cas 8–34 : niveau SysML.
+Cas 1–7 : noyau KerML. Cas 8–34 : niveau SysML. **Note de lecture 🆕** : la colonne « axe délégué » ci-dessous désigne désormais la **vraie métaclasse secondaire** vers laquelle pointe l'association composée (cf. 3.1) — il ne s'agit plus d'une interface implémentée par un objet `Behavior` synthétique, mais d'une relation d'agrégation composite vers une instance réelle de cette classe.
 
-| # | Classe | `extends` (axe primaire) | `implements` (axe délégué) |
+| # | Classe | `extends` (axe primaire) | Association composée vers (axe secondaire) |
 |---|---|---|---|
 | 1 | `Association` | `Relationship` | `Classifier` |
 | 2 | `AssociationStructure` | `Association` | `Structure` |
@@ -299,8 +314,8 @@ Cf. Partie 3.3 — généraliser la pratique à **tous** les concepts couverts p
 | 8 | `PropertyTable` (pas TaggedValue) pour `MetadataDefinition/Usage` | 2.3 | Critique |
 | 9 | Vue IHM dédiée « Metadata » pour ne pas perdre l'utilisateur | 2.3 | Normale |
 | 10 | Pas de 4ᵉ chevauchement à traiter | 2.4 | Normale |
-| 11 | Règle générale de délégation pour héritage multiple + limites SemGen | 3.1 | Critique |
-| 12 | Investir dans une évolution de SemGen ou traiter les 34 cas à la main | 3.2 | Normale |
+| 11 | Patron d'association composée pour héritage multiple (remplace le pattern délégué) + convention de nommage des accesseurs | 3.1 | Critique |
+| 12 | Maintenir ou abandonner la piste d'évolution SemGen (largement caduque) | 3.2 | Faible |
 | 13 | Revue cas par cas des 34 résolutions (avec exemples) | 3.3 | Normale |
 | 14 | Structure finale du livrable (spec seule ou + exigences Modelio) | 5.1 | Normale |
 | 15 | Canal de communication avec l'équipe parsing | 5.2 | Critique |
