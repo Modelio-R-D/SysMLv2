@@ -1,11 +1,18 @@
 """Phase 3, final: real generalizations (single-parent classes as-is, the 32
-multi-inheritance cases keep only their primary) plus, for each case, a plain
-composed Attribute on the primary typed directly by the real secondary class
-(no synthetic delegate class - see points-a-trancher.md point 5), annotated
-with a traceability Note. Consolidates what were phase3/3b-3k during
-development into the one script that reflects the final design."""
+multi-inheritance cases keep only their primary) plus, for each case, a
+composed Association between the primary and the real secondary class (no
+synthetic delegate class - see points-a-trancher.md point 5), annotated with
+a traceability Note. An earlier version of this script used a plain composed
+Attribute instead of an Association - confirmed broken at real SemGen/
+JavaDesigner generation time (fails with "not a valid java element ... check
+<<JavaClass>> stereotype"), since every real cross-class reference in this
+model is an Association, never an Attribute. Validated on a disposable test
+metamodel before being applied here: both AssociationEnds need the Semantic
+stereotype, explicit setTarget()/setSource() (Error 28), and the end owned by
+the primary (the whole) needs aggregation=composite."""
 
 from org.eclipse.core.runtime import NullProgressMonitor
+from org.modelio.metamodel.uml.statik import AggregationKind
 from collections import deque
 
 factory = modelingSession.getModel()
@@ -84,6 +91,8 @@ pkgRoot = find_child(sysml2Root, "modelio.sysml2")
 refPkg = find_child(pkgRoot, "reference")
 specPkg = find_child(refPkg, "spec")
 designPkg = find_child(refPkg, "design")
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
 
 def bfs_collect(root, mclasses, max_nodes=20000):
     q = deque([root])
@@ -159,11 +168,11 @@ for g in gensList:
         continue
     singleParent[subName] = sup.getName()
 
-stats = {"Generalization": 0, "ComposedAttribute": 0, "Note": 0, "cases_processed": 0, "cases_skipped_excluded": 0}
+stats = {"Generalization": 0, "ComposedAssociation": 0, "Note": 0, "cases_processed": 0, "cases_skipped_excluded": 0}
 
-tr = modelingSession.createTransaction("Phase 3: generalizations + direct composed attributes for the 34 cases")
+tr = modelingSession.createTransaction("Phase 3: generalizations + composed associations for the 34 cases")
 try:
-    # 32 multi-inheritance cases: primary generalization + composed attribute(s).
+    # 32 multi-inheritance cases: primary generalization + composed association(s).
     for className, caseInfo in CASES.items():
         if className in EXCLUDED_CLASSES:
             stats["cases_skipped_excluded"] += 1
@@ -184,11 +193,33 @@ try:
             if secCls is None:
                 print "  WARNING: secondary class missing:", secName
                 continue
-            composedAttr = factory.createAttribute()
-            composedAttr.setName(secName[0].lower() + secName[1:])
-            composedAttr.setType(secCls)
-            newClass.getOwnedAttribute().add(composedAttr)
-            stats["ComposedAttribute"] += 1
+
+            endOnPrimary = factory.createAssociationEnd()
+            endOnPrimary.setName(secName[0].lower() + secName[1:])
+            newClass.getOwnedEnd().add(endOnPrimary)
+            endOnPrimary.setMultiplicityMin("1")
+            endOnPrimary.setMultiplicityMax("1")
+            endOnPrimary.setAggregation(AggregationKind.KINDISCOMPOSITION)
+
+            endOnSecondary = factory.createAssociationEnd()
+            endOnSecondary.setName("")
+            secCls.getOwnedEnd().add(endOnSecondary)
+            endOnSecondary.setMultiplicityMin("0")
+            endOnSecondary.setMultiplicityMax("1")
+
+            endOnPrimary.setOpposite(endOnSecondary)
+            endOnSecondary.setOpposite(endOnPrimary)
+            endOnPrimary.setTarget(secCls)
+            endOnSecondary.setTarget(newClass)
+
+            newAssoc = factory.createAssociation()
+            endOnPrimary.setAssociation(newAssoc)
+            endOnSecondary.setAssociation(newAssoc)
+
+            endOnPrimary.addStereotype(moduleName, "Semantic")
+            endOnSecondary.addStereotype(moduleName, "Semantic")
+
+            stats["ComposedAssociation"] += 1
 
             caseNum = CASE_NUMBERS.get((className, secName))
             note = factory.createNote()
@@ -198,7 +229,7 @@ try:
                 "reference/design pour porter l'axe delegue %s (implements %s a la main "
                 "dans le XImpl.java genere)." % (caseNum, secName, secName)
             )
-            note.setSubject(composedAttr)
+            note.setSubject(endOnPrimary)
             stats["Note"] += 1
         stats["cases_processed"] += 1
 
