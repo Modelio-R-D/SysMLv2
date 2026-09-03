@@ -1,0 +1,86 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def bfs_find_first_of_type(root, typeName, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            if el.getMClass().getName() == typeName:
+                return el, visited
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None, visited
+
+assoc, visited = bfs_find_first_of_type(specPkg, "Association", max_nodes=6000)
+print "visited:", visited
+print "assoc:", assoc
+print "owner:", assoc.getCompositionOwner().getName()
+
+print ""
+print "relevant dir() on Association:"
+for m in dir(assoc):
+    if not m.startswith("_") and ('end' in m.lower() or 'own' in m.lower()):
+        print "  ", m
+
+ends = assoc.getEnd()
+print ""
+print "getEnd() count:", len(ends)
+for e in ends:
+    print ""
+    print "  end:", e.getName(), e.getUuid()
+    print "  owner (composition):", e.getCompositionOwner().getName() if e.getCompositionOwner() else None
+    print "  relevant dir() on AssociationEnd:"
+    for m in dir(e):
+        if not m.startswith("_") and ('aggreg' in m.lower() or 'composit' in m.lower() or 'type' in m.lower() or 'multip' in m.lower() or 'opposit' in m.lower() or 'associat' in m.lower() or 'visib' in m.lower() or 'order' in m.lower() or 'uniq' in m.lower()):
+            print "    ", m
+    try:
+        print "  getType():", e.getType().getName() if e.getType() else None
+    except Exception, ex:
+        print "  getType() failed:", ex
+    try:
+        print "  getAggregationKind():", e.getAggregationKind()
+    except Exception, ex:
+        print "  getAggregationKind() failed:", ex
+    try:
+        print "  getMultiplicityMin/Max():", e.getMultiplicityMin(), e.getMultiplicityMax()
+    except Exception, ex:
+        print "  multiplicity failed:", ex
+    try:
+        print "  getOpposite():", e.getOpposite().getName() if e.getOpposite() else None
+    except Exception, ex:
+        print "  getOpposite() failed:", ex
+    try:
+        print "  getAssociation():", e.getAssociation()
+    except Exception, ex:
+        print "  getAssociation() failed:", ex

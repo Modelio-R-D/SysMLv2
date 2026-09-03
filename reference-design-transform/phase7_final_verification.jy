@@ -1,0 +1,76 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_count(root, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    counts = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            counts[mcls] = counts.get(mcls, 0) + 1
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return counts, visited
+
+specCounts, sv = bfs_count(specPkg)
+designCounts, dv = bfs_count(designPkg)
+print "spec visited:", sv, "design visited:", dv
+print ""
+
+EXPECTED_DELTA = {
+    "Class": "175 - 5 chevauchements + 1 (SysMLProject) = 171",
+    "Enumeration": "7 (unchanged)",
+    "Package": "49 (unchanged)",
+    "Component": "2 (unchanged)",
+    "Attribute": "77 - 2 (owned by excluded classes) + 33 (composed secondary-axis) = 108",
+    "Operation": "103 (unchanged - no exclusions had operations)",
+    "EnumerationLiteral": "19 (unchanged)",
+    "Generalization": "209 total in spec; design keeps 1 per non-excluded class (137 normal + 32 case-primary) + 2 new graft-point generalizations (KerMLModelElement->ModelElement, SysMLProject->AbstractProject) = 171",
+    "Association": "316 - 6 (subsumed by chevauchement reuse) = 310",
+    "AssociationEnd": "632 - 12 (6 associations x 2 ends) = 620",
+    "Note": "0 copied from spec (skipped) + 33 (secondary-axis traceability annotations) = 33",
+    "ClassDiagram": "0 (skipped, presentation-only)",
+    "Constraint": "0 (skipped, OCL bodies out of scope per agreement)",
+    "TaggedValue": "0 copied from spec (skipped) + new SemGen stereotype tags (not counted here, high volume, verified separately in Phase 5)",
+    "TagParameter": "0 copied from spec (skipped) + new SemGen stereotype tag params",
+    "PackageImport": "0 (skipped, spec-side administrative)",
+    "Parameter": "188 (unchanged - all real operations' params/returns preserved)",
+    "PropertyTable": "0 (skipped, not part of generatable metamodel)",
+}
+
+print "%-18s %8s %8s   %s" % ("MClass", "spec", "design", "expected delta")
+allKeys = sorted(set(specCounts.keys()) | set(designCounts.keys()) | set(EXPECTED_DELTA.keys()))
+for k in allKeys:
+    print "%-18s %8d %8d   %s" % (k, specCounts.get(k, 0), designCounts.get(k, 0), EXPECTED_DELTA.get(k, "(not pre-specified)"))

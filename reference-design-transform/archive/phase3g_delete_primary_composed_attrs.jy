@@ -1,0 +1,67 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+allAttrs, _ = bfs_collect_list(designPkg, set(["Attribute"]))
+toDelete = [a for a in allAttrs if a.getType() is not None and a.getType().getName().endswith("Delegate")]
+print "composed attrs on primary classes pointing at delegates:", len(toDelete)
+for a in toDelete:
+    owner = a.getCompositionOwner()
+    print "  ", owner.getName() if owner else None, ".", a.getName(), "->", a.getType().getName()
+
+tr = modelingSession.createTransaction("Phase 3g: delete primary-class composed attrs pointing at old delegates")
+try:
+    for a in toDelete:
+        a.delete()
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

@@ -1,0 +1,91 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+def bfs_find_first_named(root, name, mclass, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getName() == name and el.getMClass().getName() == mclass:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+elementCls = bfs_find_first_named(designPkg, "Element", "Class")
+
+platformRoot = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "platform.core":
+        platformRoot = root
+        break
+infraPath = ["modelio.platform.core", "metamodel", "infrastructure", "Infrastructure", "infrastructure metamodel", "uml", "infrastructure"]
+infraPkg = platformRoot
+for name in infraPath:
+    infraPkg = find_child(infraPkg, name)
+modelElementCls = find_child(infraPkg, "ModelElement")
+abstractProjectCls = find_child(infraPkg, "AbstractProject")
+
+designSysMLComp = find_child(designPkg, "SysML")
+sysmlModelPkg = find_child(designSysMLComp, "Model")
+
+mmExt = modelingSession.getMetamodelExtensions()
+orphansTagType = mmExt.getTagType(moduleName, "Semantic.orphans.allowed", elementCls.getMClass())
+
+tr = modelingSession.createTransaction("Phase 6: graft points - KerMLModelElement + SysMLProject")
+try:
+    # Graft point 1: rename Element -> KerMLModelElement, extend ModelElement.
+    elementCls.setName("KerMLModelElement")
+    factory.createGeneralization(elementCls, modelElementCls)
+
+    # Graft point 2: create SysMLProject extends AbstractProject.
+    sysmlProjectCls = factory.createClass("SysMLProject", sysmlModelPkg)
+    factory.createGeneralization(sysmlProjectCls, abstractProjectCls)
+    sysmlProjectCls.addStereotype(moduleName, "Semantic")
+    orphansTag = factory.createTaggedValue()
+    orphansTag.setDefinition(orphansTagType)
+    sysmlProjectCls.getTag().add(orphansTag)
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "KerMLModelElement:", elementCls.getName()
+print "SysMLProject:", sysmlProjectCls.getName(), "stereotyped Semantic:", sysmlProjectCls.isStereotyped(moduleName, "Semantic")
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

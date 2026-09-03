@@ -1,0 +1,233 @@
+"""Phase 3, final: real generalizations (single-parent classes as-is, the 32
+multi-inheritance cases keep only their primary) plus, for each case, a plain
+composed Attribute on the primary typed directly by the real secondary class
+(no synthetic delegate class - see points-a-trancher.md point 5), annotated
+with a traceability Note. Consolidates what were phase3/3b-3k during
+development into the one script that reflects the final design."""
+
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+# 34-case table from points-a-trancher.md point 5, cross-verified against live parent data.
+CASES = {
+    "Association": {"primary": "Relationship", "secondaries": ["Classifier"]},
+    "AssociationStructure": {"primary": "Association", "secondaries": ["Structure"]},
+    "Connector": {"primary": "Feature", "secondaries": ["Relationship"]},
+    "Flow": {"primary": "Connector", "secondaries": ["Step"]},
+    "Interaction": {"primary": "Behavior", "secondaries": ["Association"]},
+    "MetadataFeature": {"primary": "Feature", "secondaries": ["AnnotatingElement"]},
+    "SuccessionFlow": {"primary": "Flow", "secondaries": ["Succession"]},
+    "ActionDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Behavior"]},
+    "ActionUsage": {"primary": "OccurrenceUsage", "secondaries": ["Step"]},
+    "AssertConstraintUsage": {"primary": "ConstraintUsage", "secondaries": ["Invariant"]},
+    "AttributeDefinition": {"primary": "Definition", "secondaries": ["DataType"]},
+    "BindingConnectorAsUsage": {"primary": "ConnectorAsUsage", "secondaries": ["BindingConnector"]},
+    "CalculationDefinition": {"primary": "ActionDefinition", "secondaries": ["Function"]},
+    "CalculationUsage": {"primary": "ActionUsage", "secondaries": ["Expression"]},
+    "ConnectionDefinition": {"primary": "PartDefinition", "secondaries": ["AssociationStructure"]},
+    "ConnectionUsage": {"primary": "PartUsage", "secondaries": ["ConnectorAsUsage"]},
+    "ConnectorAsUsage": {"primary": "Usage", "secondaries": ["Connector"]},
+    "ConstraintDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Predicate"]},
+    "ConstraintUsage": {"primary": "OccurrenceUsage", "secondaries": ["BooleanExpression"]},
+    "ExhibitStateUsage": {"primary": "PerformActionUsage", "secondaries": ["StateUsage"]},
+    "FlowDefinition": {"primary": "ActionDefinition", "secondaries": ["Interaction"]},
+    "FlowUsage": {"primary": "ActionUsage", "secondaries": ["ConnectorAsUsage", "Flow"]},
+    "IncludeUseCaseUsage": {"primary": "PerformActionUsage", "secondaries": ["UseCaseUsage"]},
+    "ItemDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Structure"]},
+    "MembershipExpose": {"primary": "Expose", "secondaries": ["MembershipImport"]},
+    "MetadataDefinition": {"primary": "ItemDefinition", "secondaries": ["Metaclass"]},
+    "MetadataUsage": {"primary": "ItemUsage", "secondaries": ["MetadataFeature"]},
+    "NamespaceExpose": {"primary": "Expose", "secondaries": ["NamespaceImport"]},
+    "OccurrenceDefinition": {"primary": "Definition", "secondaries": ["Class"]},
+    "PerformActionUsage": {"primary": "ActionUsage", "secondaries": ["EventOccurrenceUsage"]},
+    "PortDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Structure"]},
+    "SatisfyRequirementUsage": {"primary": "RequirementUsage", "secondaries": ["AssertConstraintUsage"]},
+    "SuccessionAsUsage": {"primary": "ConnectorAsUsage", "secondaries": ["Succession"]},
+    "SuccessionFlowUsage": {"primary": "FlowUsage", "secondaries": ["SuccessionFlow"]},
+}
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+ROOT_CLASS = "Element"  # graft point, handled in Phase 6 - skipped here
+
+CASE_NUMBERS = {  # (primary, secondary) -> case # per points-a-trancher.md point 5
+    ("Association", "Classifier"): 1, ("AssociationStructure", "Structure"): 2,
+    ("Connector", "Relationship"): 3, ("Flow", "Step"): 4, ("Interaction", "Association"): 5,
+    ("MetadataFeature", "AnnotatingElement"): 6, ("SuccessionFlow", "Succession"): 7,
+    ("ActionDefinition", "Behavior"): 8, ("ActionUsage", "Step"): 9,
+    ("AssertConstraintUsage", "Invariant"): 10, ("AttributeDefinition", "DataType"): 11,
+    ("BindingConnectorAsUsage", "BindingConnector"): 12, ("CalculationDefinition", "Function"): 13,
+    ("CalculationUsage", "Expression"): 14, ("ConnectionDefinition", "AssociationStructure"): 15,
+    ("ConnectionUsage", "ConnectorAsUsage"): 16, ("ConnectorAsUsage", "Connector"): 17,
+    ("ConstraintDefinition", "Predicate"): 18, ("ConstraintUsage", "BooleanExpression"): 19,
+    ("ExhibitStateUsage", "StateUsage"): 20, ("FlowDefinition", "Interaction"): 21,
+    ("FlowUsage", "ConnectorAsUsage"): 22, ("FlowUsage", "Flow"): 22,
+    ("IncludeUseCaseUsage", "UseCaseUsage"): 23, ("ItemDefinition", "Structure"): 24,
+    ("MembershipExpose", "MembershipImport"): 25, ("NamespaceExpose", "NamespaceImport"): 28,
+    ("OccurrenceDefinition", "Class"): 29, ("PerformActionUsage", "EventOccurrenceUsage"): 30,
+    ("PortDefinition", "Structure"): 31, ("SatisfyRequirementUsage", "AssertConstraintUsage"): 32,
+    ("SuccessionAsUsage", "Succession"): 33, ("SuccessionFlowUsage", "SuccessionFlow"): 34,
+}
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+def bfs_collect_list(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+specByName, sv = bfs_collect(specPkg, set(["Class", "Enumeration"]))
+designByName, dv = bfs_collect(designPkg, set(["Class", "Enumeration"]))
+print "spec classes/enums:", len(specByName), "design classes/enums:", len(designByName)
+
+gensList, _ = bfs_collect_list(specPkg, set(["Generalization"]))
+singleParent = {}
+for g in gensList:
+    sub = g.getSubType()
+    sup = g.getSuperType()
+    if sub is None or sup is None:
+        continue
+    subName = sub.getName()
+    if subName in CASES:
+        continue
+    singleParent[subName] = sup.getName()
+
+stats = {"Generalization": 0, "ComposedAttribute": 0, "Note": 0, "cases_processed": 0, "cases_skipped_excluded": 0}
+
+tr = modelingSession.createTransaction("Phase 3: generalizations + direct composed attributes for the 34 cases")
+try:
+    # 32 multi-inheritance cases: primary generalization + composed attribute(s).
+    for className, caseInfo in CASES.items():
+        if className in EXCLUDED_CLASSES:
+            stats["cases_skipped_excluded"] += 1
+            continue
+        if className not in designByName:
+            print "  SKIP (not in design):", className
+            continue
+        newClass = designByName[className]
+        primaryName = caseInfo["primary"]
+        if primaryName in designByName:
+            factory.createGeneralization(newClass, designByName[primaryName])
+            stats["Generalization"] += 1
+        else:
+            print "  WARNING: primary not found in design:", primaryName, "for", className
+
+        for secName in caseInfo["secondaries"]:
+            secCls = designByName.get(secName)
+            if secCls is None:
+                print "  WARNING: secondary class missing:", secName
+                continue
+            composedAttr = factory.createAttribute()
+            composedAttr.setName(secName[0].lower() + secName[1:])
+            composedAttr.setType(secCls)
+            newClass.getOwnedAttribute().add(composedAttr)
+            stats["ComposedAttribute"] += 1
+
+            caseNum = CASE_NUMBERS.get((className, secName))
+            note = factory.createNote()
+            note.setContent(
+                "Axe secondaire (cas %s, points-a-trancher.md point 5) : cette relation "
+                "n'existe pas dans reference/spec. Ajoutee lors de la transformation "
+                "reference/design pour porter l'axe delegue %s (implements %s a la main "
+                "dans le XImpl.java genere)." % (caseNum, secName, secName)
+            )
+            note.setSubject(composedAttr)
+            stats["Note"] += 1
+        stats["cases_processed"] += 1
+
+    # Normal (non-case) classes: copy their single real generalization directly, skip root.
+    normal_count = 0
+    for className, newClass in designByName.items():
+        if className in CASES or className == ROOT_CLASS:
+            continue
+        if newClass.getMClass().getName() != "Class":
+            continue
+        parentName = singleParent.get(className)
+        if parentName is None:
+            continue
+        if parentName not in designByName:
+            print "  WARNING: parent not in design:", parentName, "for", className
+            continue
+        factory.createGeneralization(newClass, designByName[parentName])
+        stats["Generalization"] += 1
+        normal_count += 1
+    print "normal single-parent generalizations created:", normal_count
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

@@ -1,0 +1,40 @@
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def dump(el, indent, maxDepth, curDepth=0):
+    if curDepth > maxDepth:
+        return
+    for c in el.getCompositionChildren():
+        try:
+            mcls = c.getMClass().getName()
+        except:
+            mcls = "?"
+        stereo_info = ""
+        if mcls == "Package" or mcls == "Component":
+            try:
+                exts = c.getExtension()
+                if exts:
+                    stereo_info = " [stereotyped: " + ", ".join([e.getName() for e in exts]) + "]"
+            except:
+                pass
+        print "  " * curDepth, c.getName(), "(", mcls, ")", stereo_info
+        if mcls in ("Package", "Component"):
+            dump(c, indent, maxDepth, curDepth + 1)
+
+for compName in ["SysML", "KerML"]:
+    comp = find_child(specPkg, compName)
+    print ""
+    print "=== ", compName, " ==="
+    dump(comp, "  ", 3)

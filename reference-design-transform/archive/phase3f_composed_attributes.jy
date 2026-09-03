@@ -1,0 +1,141 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+CASES = {
+    "Association": {"primary": "Relationship", "secondaries": ["Classifier"]},
+    "AssociationStructure": {"primary": "Association", "secondaries": ["Structure"]},
+    "Connector": {"primary": "Feature", "secondaries": ["Relationship"]},
+    "Flow": {"primary": "Connector", "secondaries": ["Step"]},
+    "Interaction": {"primary": "Behavior", "secondaries": ["Association"]},
+    "MetadataFeature": {"primary": "Feature", "secondaries": ["AnnotatingElement"]},
+    "SuccessionFlow": {"primary": "Flow", "secondaries": ["Succession"]},
+    "ActionDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Behavior"]},
+    "ActionUsage": {"primary": "OccurrenceUsage", "secondaries": ["Step"]},
+    "AssertConstraintUsage": {"primary": "ConstraintUsage", "secondaries": ["Invariant"]},
+    "AttributeDefinition": {"primary": "Definition", "secondaries": ["DataType"]},
+    "BindingConnectorAsUsage": {"primary": "ConnectorAsUsage", "secondaries": ["BindingConnector"]},
+    "CalculationDefinition": {"primary": "ActionDefinition", "secondaries": ["Function"]},
+    "CalculationUsage": {"primary": "ActionUsage", "secondaries": ["Expression"]},
+    "ConnectionDefinition": {"primary": "PartDefinition", "secondaries": ["AssociationStructure"]},
+    "ConnectionUsage": {"primary": "PartUsage", "secondaries": ["ConnectorAsUsage"]},
+    "ConnectorAsUsage": {"primary": "Usage", "secondaries": ["Connector"]},
+    "ConstraintDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Predicate"]},
+    "ConstraintUsage": {"primary": "OccurrenceUsage", "secondaries": ["BooleanExpression"]},
+    "ExhibitStateUsage": {"primary": "PerformActionUsage", "secondaries": ["StateUsage"]},
+    "FlowDefinition": {"primary": "ActionDefinition", "secondaries": ["Interaction"]},
+    "FlowUsage": {"primary": "ActionUsage", "secondaries": ["ConnectorAsUsage", "Flow"]},
+    "IncludeUseCaseUsage": {"primary": "PerformActionUsage", "secondaries": ["UseCaseUsage"]},
+    "ItemDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Structure"]},
+    "MembershipExpose": {"primary": "Expose", "secondaries": ["MembershipImport"]},
+    "MetadataDefinition": {"primary": "ItemDefinition", "secondaries": ["Metaclass"]},
+    "MetadataUsage": {"primary": "ItemUsage", "secondaries": ["MetadataFeature"]},
+    "NamespaceExpose": {"primary": "Expose", "secondaries": ["NamespaceImport"]},
+    "OccurrenceDefinition": {"primary": "Definition", "secondaries": ["Class"]},
+    "PerformActionUsage": {"primary": "ActionUsage", "secondaries": ["EventOccurrenceUsage"]},
+    "PortDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Structure"]},
+    "SatisfyRequirementUsage": {"primary": "RequirementUsage", "secondaries": ["AssertConstraintUsage"]},
+    "SuccessionAsUsage": {"primary": "ConnectorAsUsage", "secondaries": ["Succession"]},
+    "SuccessionFlowUsage": {"primary": "FlowUsage", "secondaries": ["SuccessionFlow"]},
+}
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+designByName, dv = bfs_collect(designPkg, set(["Class"]))
+print "design classes:", len(designByName)
+
+stats = {"primary_composed": 0, "cascade_composed": 0}
+
+tr = modelingSession.createTransaction("Phase 3f: composed attributes on primaries and cascading delegates")
+try:
+    for className, info in CASES.items():
+        if className in EXCLUDED_CLASSES:
+            continue
+        primaryCls = designByName.get(className)
+        if primaryCls is None:
+            print "  WARNING: primary class missing:", className
+            continue
+        for sec in info["secondaries"]:
+            delegateCls = designByName.get(sec + "Delegate")
+            if delegateCls is None:
+                print "  WARNING: delegate missing for", sec
+                continue
+            composedAttr = factory.createAttribute()
+            composedAttr.setName(sec[0].lower() + sec[1:])
+            composedAttr.setType(delegateCls)
+            primaryCls.getOwnedAttribute().add(composedAttr)
+            stats["primary_composed"] += 1
+
+            # If this secondary is itself one of the 32 cases, wire the cascading
+            # composed attribute on ITS shared delegate too (only needs doing once,
+            # since the delegate is shared - guard against re-adding on repeat cases).
+            if sec in CASES and sec not in EXCLUDED_CLASSES:
+                for subSec in CASES[sec]["secondaries"]:
+                    already = any(a.getName() == (subSec[0].lower() + subSec[1:]) for a in delegateCls.getOwnedAttribute())
+                    if already:
+                        continue
+                    subDelegateCls = designByName.get(subSec + "Delegate")
+                    if subDelegateCls is None:
+                        print "  WARNING: sub-delegate missing for", subSec
+                        continue
+                    cascadeAttr = factory.createAttribute()
+                    cascadeAttr.setName(subSec[0].lower() + subSec[1:])
+                    cascadeAttr.setType(subDelegateCls)
+                    delegateCls.getOwnedAttribute().add(cascadeAttr)
+                    stats["cascade_composed"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

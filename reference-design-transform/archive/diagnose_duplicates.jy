@@ -1,0 +1,72 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect_classes(root, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            mcls = el.getMClass().getName()
+            if mcls in ("Class", "Enumeration"):
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+specByName, sv = bfs_collect_classes(specPkg)
+designByName, dv = bfs_collect_classes(designPkg)
+
+mismatches = []
+for name, designEl in designByName.items():
+    specEl = specByName.get(name)
+    if specEl is None:
+        continue
+    mcls = designEl.getMClass().getName()
+    if mcls == "Enumeration":
+        specCount = len([c for c in specEl.getCompositionChildren() if c.getMClass().getName() == "EnumerationLiteral" and not c.isDeleted()])
+        designCount = len([c for c in designEl.getCompositionChildren() if c.getMClass().getName() == "EnumerationLiteral" and not c.isDeleted()])
+        if specCount != designCount:
+            mismatches.append((name, "EnumerationLiteral", specCount, designCount))
+    else:
+        specAttrCount = len([a for a in specEl.getOwnedAttribute() if not a.isDeleted()])
+        designAttrCount = len([a for a in designEl.getOwnedAttribute() if not a.isDeleted()])
+        if specAttrCount != designAttrCount:
+            mismatches.append((name, "Attribute", specAttrCount, designAttrCount))
+        specOpCount = len([o for o in specEl.getOwnedOperation() if not o.isDeleted()])
+        designOpCount = len([o for o in designEl.getOwnedOperation() if not o.isDeleted()])
+        if specOpCount != designOpCount:
+            mismatches.append((name, "Operation", specOpCount, designOpCount))
+
+print "mismatches (name, kind, spec_count, design_count):", len(mismatches)
+for m in mismatches:
+    print "  ", m

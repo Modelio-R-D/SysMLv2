@@ -1,0 +1,51 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_find_first_named(root, name, mclass, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if el.getName() == name and el.getMClass().getName() == mclass:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+specEnum = bfs_find_first_named(specPkg, "RequirementConstraintKind", "Enumeration")
+designEnum = bfs_find_first_named(designPkg, "RequirementConstraintKind", "Enumeration")
+
+print "spec literals:"
+for c in specEnum.getCompositionChildren():
+    if c.getMClass().getName() == "EnumerationLiteral":
+        print "  ", c.getName(), c.getUuid(), "isDeleted:", c.isDeleted()
+
+print "design literals:"
+for c in designEnum.getCompositionChildren():
+    if c.getMClass().getName() == "EnumerationLiteral":
+        print "  ", c.getName(), c.getUuid(), "isDeleted:", c.isDeleted()

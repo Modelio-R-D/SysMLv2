@@ -1,0 +1,90 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def bfs_collect(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    els = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                els.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return els, visited
+
+classes, cv = bfs_collect(specPkg, set(["Class"]))
+gens, gv = bfs_collect(specPkg, set(["Generalization"]))
+print "classes:", cv, "-> found", len(classes)
+print "generalizations found:", len(gens)
+
+g0 = gens[0]
+print ""
+print "sample Generalization dir() (filtered):"
+for m in dir(g0):
+    if not m.startswith("_") and ('sub' in m.lower() or 'super' in m.lower() or 'type' in m.lower()):
+        print "  ", m
+print "getSubType():", g0.getSubType().getName() if g0.getSubType() else None
+print "getSuperType():", g0.getSuperType().getName() if g0.getSuperType() else None
+
+# Count how many classes have >1 direct generalization (via getSpecialization() reverse-map, per established gotcha)
+def parents_via_reverse_map(allClasses, allGens):
+    fromSub = {}
+    for g in allGens:
+        sub = g.getSubType()
+        sup = g.getSuperType()
+        if sub is None or sup is None:
+            continue
+        fromSub.setdefault(sub.getUuid(), []).append(sup.getName())
+    return fromSub
+
+fromSub = parents_via_reverse_map(classes, gens)
+multi = {c.getName(): fromSub[c.getUuid()] for c in classes if c.getUuid() in fromSub and len(fromSub[c.getUuid()]) > 1}
+print ""
+print "classes with >1 direct generalization:", len(multi)
+for k in sorted(multi.keys()):
+    print "  ", k, "->", multi[k]
+
+# Check: do any surviving (non-excluded) classes have a generalization pointing at one of the 5 excluded classes?
+EXCLUDED = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+pointing_at_excluded = []
+for g in gens:
+    sup = g.getSuperType()
+    sub = g.getSubType()
+    if sup and sup.getName() in EXCLUDED:
+        pointing_at_excluded.append((sub.getName() if sub else None, sup.getName()))
+print ""
+print "generalizations pointing AT an excluded class as supertype:", len(pointing_at_excluded)
+for p in pointing_at_excluded:
+    print "  ", p

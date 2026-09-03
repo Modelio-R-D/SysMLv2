@@ -1,0 +1,123 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+CASES = {
+    "Association": {"secondaries": ["Classifier"]},
+    "AssociationStructure": {"secondaries": ["Structure"]},
+    "Connector": {"secondaries": ["Relationship"]},
+    "Flow": {"secondaries": ["Step"]},
+    "Interaction": {"secondaries": ["Association"]},
+    "MetadataFeature": {"secondaries": ["AnnotatingElement"]},
+    "SuccessionFlow": {"secondaries": ["Succession"]},
+    "ActionDefinition": {"secondaries": ["Behavior"]},
+    "ActionUsage": {"secondaries": ["Step"]},
+    "AssertConstraintUsage": {"secondaries": ["Invariant"]},
+    "AttributeDefinition": {"secondaries": ["DataType"]},
+    "BindingConnectorAsUsage": {"secondaries": ["BindingConnector"]},
+    "CalculationDefinition": {"secondaries": ["Function"]},
+    "CalculationUsage": {"secondaries": ["Expression"]},
+    "ConnectionDefinition": {"secondaries": ["AssociationStructure"]},
+    "ConnectionUsage": {"secondaries": ["ConnectorAsUsage"]},
+    "ConnectorAsUsage": {"secondaries": ["Connector"]},
+    "ConstraintDefinition": {"secondaries": ["Predicate"]},
+    "ConstraintUsage": {"secondaries": ["BooleanExpression"]},
+    "ExhibitStateUsage": {"secondaries": ["StateUsage"]},
+    "FlowDefinition": {"secondaries": ["Interaction"]},
+    "FlowUsage": {"secondaries": ["ConnectorAsUsage", "Flow"]},
+    "IncludeUseCaseUsage": {"secondaries": ["UseCaseUsage"]},
+    "ItemDefinition": {"secondaries": ["Structure"]},
+    "MembershipExpose": {"secondaries": ["MembershipImport"]},
+    "MetadataDefinition": {"secondaries": ["Metaclass"]},
+    "MetadataUsage": {"secondaries": ["MetadataFeature"]},
+    "NamespaceExpose": {"secondaries": ["NamespaceImport"]},
+    "OccurrenceDefinition": {"secondaries": ["Class"]},
+    "PerformActionUsage": {"secondaries": ["EventOccurrenceUsage"]},
+    "PortDefinition": {"secondaries": ["Structure"]},
+    "SatisfyRequirementUsage": {"secondaries": ["AssertConstraintUsage"]},
+    "SuccessionAsUsage": {"secondaries": ["Succession"]},
+    "SuccessionFlowUsage": {"secondaries": ["SuccessionFlow"]},
+}
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+designByName, dv = bfs_collect(designPkg, set(["Class"]))
+print "design classes:", len(designByName)
+
+stats = {"composed": 0}
+
+tr = modelingSession.createTransaction("Phase 3j: direct composed attributes typed by the real secondary class")
+try:
+    for className, info in CASES.items():
+        if className in EXCLUDED_CLASSES:
+            continue
+        primaryCls = designByName.get(className)
+        if primaryCls is None:
+            print "  WARNING: primary class missing:", className
+            continue
+        for sec in info["secondaries"]:
+            secCls = designByName.get(sec)
+            if secCls is None:
+                print "  WARNING: secondary class missing:", sec
+                continue
+            composedAttr = factory.createAttribute()
+            composedAttr.setName(sec[0].lower() + sec[1:])
+            composedAttr.setType(secCls)
+            primaryCls.getOwnedAttribute().add(composedAttr)
+            stats["composed"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

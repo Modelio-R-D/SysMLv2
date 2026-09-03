@@ -1,0 +1,205 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+# Chevauchement redirect targets, per points-a-trancher.md point 3.
+REDIRECT = {
+    "Comment": "Note",
+    "Documentation": "Note",
+    "Dependency": "Dependency",   # infra Dependency, same name, different (infra) object
+    "MetadataDefinition": "Stereotype",
+    "MetadataUsage": "TaggedValue",
+}
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+# Infrastructure package (chevauchement + graft targets), confirmed live earlier this session.
+platformRoot = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "platform.core":
+        platformRoot = root
+        break
+infraPath = ["modelio.platform.core", "metamodel", "infrastructure", "Infrastructure", "infrastructure metamodel", "uml", "infrastructure"]
+infraPkg = platformRoot
+for name in infraPath:
+    infraPkg = find_child(infraPkg, name)
+infraByName = {}
+for c in infraPkg.getCompositionChildren():
+    try:
+        if c.getMClass().getName() == "Class":
+            infraByName[c.getName()] = c
+    except:
+        pass
+print "infra classes found:", sorted(infraByName.keys())
+
+def bfs_collect(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+def bfs_collect_list(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+specByName, sv = bfs_collect(specPkg, set(["Class", "Enumeration"]))
+designByName, dv = bfs_collect(designPkg, set(["Class", "Enumeration"]))
+specAssocs, av = bfs_collect_list(specPkg, set(["Association"]))
+print "spec associations found:", len(specAssocs)
+
+def resolve_class(name):
+    """Resolve a spec class name to its design-side counterpart, redirecting
+    excluded chevauchement classes to their infra target. Returns None if
+    unresolvable (should not happen for a well-formed model)."""
+    if name in EXCLUDED_CLASSES:
+        target = REDIRECT[name]
+        return infraByName.get(target)
+    return designByName.get(name)
+
+stats = {"copied": 0, "skipped_owner_excluded": 0, "skipped_unresolved": 0, "redirected_type": 0}
+
+tr = modelingSession.createTransaction("Phase 4: copy associations with chevauchement redirect")
+try:
+    for assoc in specAssocs:
+        ends = assoc.getEnd()
+        if len(ends) != 2:
+            stats["skipped_unresolved"] += 1
+            continue
+        e1, e2 = ends[0], ends[1]
+        owner1 = e1.getCompositionOwner()
+        owner2 = e2.getCompositionOwner()
+        if owner1 is None or owner2 is None:
+            stats["skipped_unresolved"] += 1
+            continue
+        owner1Name = owner1.getName()
+        owner2Name = owner2.getName()
+
+        # Owner side excluded -> the owning class doesn't exist in design, skip the whole association.
+        if owner1Name in EXCLUDED_CLASSES or owner2Name in EXCLUDED_CLASSES:
+            stats["skipped_owner_excluded"] += 1
+            continue
+
+        newOwner1 = resolve_class(owner1Name)
+        newOwner2 = resolve_class(owner2Name)
+        if newOwner1 is None or newOwner2 is None:
+            stats["skipped_unresolved"] += 1
+            continue
+        if owner1Name in REDIRECT or owner2Name in REDIRECT:
+            stats["redirected_type"] += 1
+
+        def make_end(srcEnd, newOwner):
+            newEnd = factory.createAssociationEnd()
+            nm = srcEnd.getName()
+            if nm:
+                newEnd.setName(nm)
+            newOwner.getOwnedEnd().add(newEnd)
+            try:
+                newEnd.setMultiplicityMin(srcEnd.getMultiplicityMin())
+                newEnd.setMultiplicityMax(srcEnd.getMultiplicityMax())
+            except:
+                pass
+            try:
+                newEnd.setAggregation(srcEnd.getAggregation())
+            except:
+                pass
+            try:
+                newEnd.setIsOrdered(srcEnd.isIsOrdered())
+                newEnd.setIsUnique(srcEnd.isIsUnique())
+            except:
+                pass
+            try:
+                newEnd.setVisibility(srcEnd.getVisibility())
+            except:
+                pass
+            return newEnd
+
+        newEnd1 = make_end(e1, newOwner1)
+        newEnd2 = make_end(e2, newOwner2)
+        newEnd1.setOpposite(newEnd2)
+        newEnd2.setOpposite(newEnd1)
+        # setTarget() is a separate, explicitly-stored field - NOT derived from
+        # setOpposite()/getCompositionOwner(). Without this, the GUI shows every
+        # end as "<no type>" even though owner/opposite/multiplicity are all
+        # correct (found live this session - see api-gotchas.md Error 28).
+        newEnd1.setTarget(newOwner2)
+        newEnd2.setTarget(newOwner1)
+        newAssoc = factory.createAssociation()
+        newEnd1.setAssociation(newAssoc)
+        newEnd2.setAssociation(newAssoc)
+        stats["copied"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

@@ -1,0 +1,65 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_find_first_named(root, name, mclass, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getName() == name and el.getMClass().getName() == mclass:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+specDef = bfs_find_first_named(specPkg, "Definition", "Class")
+designDef = bfs_find_first_named(designPkg, "Definition", "Class")
+
+specEnd = None
+for e in specDef.getOwnedEnd():
+    if e.getName() == "ownedUsage":
+        specEnd = e
+        break
+designEnd = None
+for e in designDef.getOwnedEnd():
+    if e.getName() == "ownedUsage":
+        designEnd = e
+        break
+
+specAssoc = specEnd.getAssociation()
+designAssoc = designEnd.getAssociation()
+
+print "spec assoc getTypingParameter():", specAssoc.getTypingParameter()
+print "design assoc getTypingParameter():", designAssoc.getTypingParameter()
+
+print ""
+# also compare full dir() of end itself for anything about 'represent' or 'link'
+print ""
+print "AssociationEnd dir() - unfiltered, look for anything not yet checked:"
+allMethods = [m for m in dir(specEnd) if not m.startswith("_")]
+print allMethods

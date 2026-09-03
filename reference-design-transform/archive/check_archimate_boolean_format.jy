@@ -1,0 +1,58 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+archiRoot = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "archimate":
+        archiRoot = root
+        break
+
+def bfs_find_first_of_type(root, typeName, max_nodes=2000):
+    q = deque([root])
+    seen = set()
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if not el.isDeleted() and el.getMClass().getName() == typeName:
+                return el, visited
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None, visited
+
+cls, visited = bfs_find_first_of_type(archiRoot, "Class", max_nodes=1500)
+print "visited:", visited, "sample class:", cls
+if cls:
+    for t in cls.getTag():
+        defn = t.getDefinition()
+        nm = defn.getName() if defn else None
+        if nm and ("structural" in nm or "orphans" in nm):
+            vals = [p.getValue() for p in t.getActual()]
+            print "  ", nm, "->", vals
+
+comp, visited2 = bfs_find_first_of_type(archiRoot, "Component", max_nodes=1500)
+print "sample component:", comp
+if comp:
+    for t in comp.getTag():
+        defn = t.getDefinition()
+        nm = defn.getName() if defn else None
+        if nm and "isExtension" in nm:
+            vals = [p.getValue() for p in t.getActual()]
+            print "  ", nm, "->", vals

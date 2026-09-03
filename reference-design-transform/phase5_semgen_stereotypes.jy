@@ -1,0 +1,139 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+LINK_CLASSES = set([
+    "ActorMembership", "AllocationDefinition", "AllocationUsage", "Annotation", "Association",
+    "AssociationStructure", "BindingConnector", "BindingConnectorAsUsage", "ConjugatedPortTyping",
+    "Conjugation", "ConnectionDefinition", "ConnectionUsage", "Connector", "ConnectorAsUsage",
+    "CrossSubsetting", "Differencing", "Disjoining", "ElementFilterMembership", "EndFeatureMembership",
+    "Expose", "FeatureChaining", "FeatureInverting", "FeatureMembership", "FeatureTyping", "FeatureValue",
+    "Flow", "FlowDefinition", "FlowUsage", "FramedConcernMembership", "Import", "Interaction",
+    "InterfaceDefinition", "InterfaceUsage", "Intersecting", "Membership", "MembershipExpose",
+    "MembershipImport", "NamespaceExpose", "NamespaceImport", "ObjectiveMembership", "OwningMembership",
+    "ParameterMembership", "PortConjugation", "Redefinition", "ReferenceSubsetting", "Relationship",
+    "RequirementConstraintMembership", "RequirementVerificationMembership", "ResultExpressionMembership",
+    "ReturnParameterMembership", "Specialization", "StakeholderMembership", "StateSubactionMembership",
+    "Subclassification", "SubjectMembership", "Subsetting", "Succession", "SuccessionAsUsage",
+    "SuccessionFlow", "SuccessionFlowUsage", "TransitionFeatureMembership", "TypeFeaturing", "Unioning",
+    "VariantMembership", "ViewRenderingMembership",
+])
+
+METAMODEL_PROPS = {
+    "SysML": {
+        "name": "SysML2", "id": "SysML2", "version": "0.0.1",
+        "provider": "Docaposte", "providerversion": "0.0.1",
+        "production.namespace": "org.modelio.sysml2.metamodel.sysml",
+    },
+    "KerML": {
+        "name": "KerML", "id": "KerML", "version": "0.0.1",
+        "provider": "Docaposte", "providerversion": "0.0.1",
+        "production.namespace": "org.modelio.sysml2.metamodel.kerml",
+    },
+}
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+print "moduleName:", moduleName
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+designClasses, dv = bfs_collect_list(designPkg, set(["Class"]))
+print "design classes found:", len(designClasses)
+
+# Borrow real TagType references from the already-tagged spec SysML component (Phase 0 pattern).
+tagTypesByName = {}
+for t in sysmlSpecComp.getTag():
+    tagTypesByName[t.getDefinition().getName()] = t.getDefinition()
+print "borrowed tag types:", sorted(tagTypesByName.keys())
+
+def set_tag(element, tagShortName, value):
+    fullName = "Metamodel." + tagShortName
+    tagType = tagTypesByName.get(fullName)
+    if tagType is None:
+        print "  WARNING: unknown tag type", fullName
+        return
+    newTagValue = factory.createTaggedValue()
+    newParam = factory.createTagParameter()
+    newParam.setValue(value)
+    newTagValue.getActual().add(newParam)
+    newTagValue.setDefinition(tagType)
+    element.getTag().add(newTagValue)
+
+def classify(className):
+    baseName = className
+    if baseName.endswith("Delegate"):
+        baseName = baseName[:-len("Delegate")]
+    return "SemanticLinkMetaclass" if baseName in LINK_CLASSES else "Semantic"
+
+stats = {"Metamodel": 0, "Semantic": 0, "SemanticLinkMetaclass": 0}
+
+tr = modelingSession.createTransaction("Phase 5: SemGen Metamodel + Semantic/SemanticLinkMetaclass stereotypes")
+try:
+    for compName, props in METAMODEL_PROPS.items():
+        comp = find_child(designPkg, compName)
+        comp.addStereotype(moduleName, "Metamodel")
+        for k, v in props.items():
+            set_tag(comp, k, v)
+        stats["Metamodel"] += 1
+
+    for cls in designClasses:
+        stereo = classify(cls.getName())
+        cls.addStereotype(moduleName, stereo)
+        stats[stereo] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

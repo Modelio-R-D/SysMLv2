@@ -1,0 +1,76 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+allClasses, _ = bfs_collect_list(designPkg, set(["Class"]))
+delegates = [c for c in allClasses if c.getName().endswith("Delegate")]
+print "old Delegate classes found:", len(delegates)
+
+# Find composed attributes anywhere in the model whose TYPE is one of these delegates - delete those first.
+delegateUuids = set([d.getUuid() for d in delegates])
+allAttrs, _ = bfs_collect_list(designPkg, set(["Attribute"]))
+composedAttrsToDelete = []
+for a in allAttrs:
+    t = a.getType()
+    if t is not None and t.getUuid() in delegateUuids:
+        composedAttrsToDelete.append(a)
+print "composed attributes pointing at old delegates:", len(composedAttrsToDelete)
+
+tr = modelingSession.createTransaction("Phase 3b cleanup: delete old flattened Delegate classes")
+try:
+    for a in composedAttrsToDelete:
+        a.delete()
+    for d in delegates:
+        d.delete()
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

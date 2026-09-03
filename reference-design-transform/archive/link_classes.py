@@ -1,0 +1,16 @@
+LINK_CLASSES = [
+    "ActorMembership", "AllocationDefinition", "AllocationUsage", "Annotation", "Association",
+    "AssociationStructure", "BindingConnector", "BindingConnectorAsUsage", "ConjugatedPortTyping",
+    "Conjugation", "ConnectionDefinition", "ConnectionUsage", "Connector", "ConnectorAsUsage",
+    "CrossSubsetting", "Differencing", "Disjoining", "ElementFilterMembership", "EndFeatureMembership",
+    "Expose", "FeatureChaining", "FeatureInverting", "FeatureMembership", "FeatureTyping", "FeatureValue",
+    "Flow", "FlowDefinition", "FlowUsage", "FramedConcernMembership", "Import", "Interaction",
+    "InterfaceDefinition", "InterfaceUsage", "Intersecting", "Membership", "MembershipExpose",
+    "MembershipImport", "NamespaceExpose", "NamespaceImport", "ObjectiveMembership", "OwningMembership",
+    "ParameterMembership", "PortConjugation", "Redefinition", "ReferenceSubsetting", "Relationship",
+    "RequirementConstraintMembership", "RequirementVerificationMembership", "ResultExpressionMembership",
+    "ReturnParameterMembership", "Specialization", "StakeholderMembership", "StateSubactionMembership",
+    "Subclassification", "SubjectMembership", "Subsetting", "Succession", "SuccessionAsUsage",
+    "SuccessionFlow", "SuccessionFlowUsage", "TransitionFeatureMembership", "TypeFeaturing", "Unioning",
+    "VariantMembership", "ViewRenderingMembership",
+]

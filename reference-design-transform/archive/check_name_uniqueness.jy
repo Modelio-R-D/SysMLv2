@@ -1,0 +1,51 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def bfs_collect_names(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    names = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                nm = el.getName()
+                names.setdefault(nm, []).append((mcls, eid))
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return names, visited
+
+names, visited = bfs_collect_names(specPkg, set(["Class", "Enumeration", "Package"]), max_nodes=6000)
+print "visited:", visited
+dupes = {k: v for k, v in names.items() if len(v) > 1}
+print "duplicate names (Class/Enumeration/Package):", len(dupes)
+for k, v in dupes.items():
+    print "  ", repr(k), "->", v

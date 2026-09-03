@@ -1,0 +1,56 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+sysmlComp = find_child(specPkg, "SysML")
+moduleName = sysmlComp.getExtension()[0].getModule().getName()
+
+testPkg = find_child(pkgRoot, "SemGenTest")
+testComp = find_child(testPkg, "SemGenTestMetamodel")
+
+# Borrow a real TagType reference for "Metamodel.name" from the already-correctly-tagged SysML component
+existingTag = None
+for t in sysmlComp.getTag():
+    if t.getDefinition().getName() == "Metamodel.name":
+        existingTag = t
+        break
+tagType = existingTag.getDefinition()
+print "Borrowed TagType:", tagType, tagType.getUuid()
+
+print "BEFORE - testComp.getTag() count:", len(testComp.getTag())
+
+tr = modelingSession.createTransaction("Phase 0 test: write a tag value on SemGenTestMetamodel")
+try:
+    newTagValue = factory.createTaggedValue()
+    newParam = factory.createTagParameter()
+    newParam.setValue("phase0-write-test-value")
+    newTagValue.getActual().add(newParam)
+    newTagValue.setDefinition(tagType)
+    testComp.getTag().add(newTagValue)
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "AFTER - testComp.getTag() count:", len(testComp.getTag())
+for t in testComp.getTag():
+    print "  ", t.getDefinition().getName(), "->", [p.getValue() for p in t.getActual()]
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

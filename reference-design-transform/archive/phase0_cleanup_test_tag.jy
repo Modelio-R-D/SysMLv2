@@ -1,0 +1,40 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+testPkg = find_child(pkgRoot, "SemGenTest")
+testComp = find_child(testPkg, "SemGenTestMetamodel")
+
+target = None
+for t in testComp.getTag():
+    if t.getDefinition().getName() == "Metamodel.name" and t.getActual()[0].getValue() == "phase0-write-test-value":
+        target = t
+        break
+print "target to remove:", target
+
+tr = modelingSession.createTransaction("Phase 0 cleanup: remove test tag value")
+try:
+    testComp.getTag().remove(target)
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "AFTER - testComp.getTag() count:", len(testComp.getTag())
+for t in testComp.getTag():
+    print "  ", t.getDefinition().getName(), "->", [p.getValue() for p in t.getActual()]
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

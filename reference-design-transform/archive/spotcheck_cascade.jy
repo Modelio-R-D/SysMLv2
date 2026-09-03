@@ -1,0 +1,53 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def bfs_find_first_named(root, name, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getName() == name:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+def dump(el, indent=0, maxDepth=6):
+    if indent > maxDepth:
+        return
+    for c in el.getOwnedAttribute():
+        print "  " * indent, "attr:", c.getName(), "-> type:", c.getType().getName() if c.getType() else None
+        t = c.getType()
+        if t and t.getName().endswith("Delegate"):
+            dump(t, indent + 1, maxDepth)
+    for op in el.getOwnedOperation():
+        print "  " * indent, "op:", op.getName()
+
+connDef = bfs_find_first_named(designPkg, "ConnectionDefinition")
+print "ConnectionDefinition found:", connDef
+print "own generalizations (via getSpecialization reverse check not needed - just dump attrs):"
+dump(connDef)

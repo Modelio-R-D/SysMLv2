@@ -1,0 +1,54 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlDesignComp = find_child(designPkg, "SysML")
+print "SysML design component tags:"
+for t in sysmlDesignComp.getTag():
+    print "  ", t.getDefinition().getName(), "->", [p.getValue() for p in t.getActual()]
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+def bfs_find_first_named(root, name, mclass, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getName() == name and el.getMClass().getName() == mclass:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+for testName in ["AttributeDefinition", "Association", "ClassifierDelegate"]:
+    cls = bfs_find_first_named(designPkg, testName, "Class")
+    if cls is None:
+        print testName, "-> not found"
+        continue
+    print testName, "-> Semantic:", cls.isStereotyped(moduleName, "Semantic"), \
+        "SemanticLinkMetaclass:", cls.isStereotyped(moduleName, "SemanticLinkMetaclass")

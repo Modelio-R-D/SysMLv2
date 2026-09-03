@@ -1,0 +1,74 @@
+from collections import deque
+
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+
+def bfs_collect_list(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+specAssocs, av = bfs_collect_list(specPkg, set(["Association"]))
+print "total spec associations:", len(specAssocs)
+
+owner_excluded = []
+unresolved = []
+for assoc in specAssocs:
+    ends = assoc.getEnd()
+    if len(ends) != 2:
+        unresolved.append((assoc.getUuid(), "not 2 ends: %d" % len(ends)))
+        continue
+    e1, e2 = ends[0], ends[1]
+    o1 = e1.getCompositionOwner()
+    o2 = e2.getCompositionOwner()
+    if o1 is None or o2 is None:
+        unresolved.append((assoc.getUuid(), "missing owner"))
+        continue
+    n1, n2 = o1.getName(), o2.getName()
+    if n1 in EXCLUDED_CLASSES or n2 in EXCLUDED_CLASSES:
+        owner_excluded.append((n1, e1.getName(), n2, e2.getName()))
+
+print "owner_excluded count:", len(owner_excluded)
+for o in owner_excluded:
+    print "  ", o
+print "unresolved count:", len(unresolved)
+for u in unresolved:
+    print "  ", u

@@ -1,0 +1,11 @@
+factory = modelingSession.getModel()
+tr = modelingSession.createTransaction("probe Note API - will rollback")
+try:
+    n = factory.createNote()
+    print "dir(Note) filtered:"
+    for m in dir(n):
+        if not m.startswith("_") and ("subject" in m.lower() or "content" in m.lower()):
+            print "  ", m
+finally:
+    tr.rollback()
+    print "rolled back"

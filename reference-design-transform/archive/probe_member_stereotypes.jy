@@ -1,0 +1,76 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def bfs_find_first_of_type(root, typeName, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if not el.isDeleted() and el.getMClass().getName() == typeName:
+                return el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return None
+
+sampleAttr = bfs_find_first_of_type(specPkg, "Attribute")
+sampleEnd = bfs_find_first_of_type(specPkg, "AssociationEnd")
+sampleOp = bfs_find_first_of_type(specPkg, "Operation")
+sampleEnum = bfs_find_first_of_type(specPkg, "Enumeration")
+
+for label, sample in [("Attribute", sampleAttr), ("AssociationEnd", sampleEnd), ("Operation", sampleOp), ("Enumeration", sampleEnum)]:
+    mcls = sample.getMClass()
+    print ""
+    print "=== %s (%s) stereotypes ===" % (label, mcls.getName())
+    try:
+        stereos = mmExt.findStereotypes(".*", mcls)
+        for s in stereos:
+            print "  ", s.getName()
+    except Exception, e:
+        print "  FAILED:", e
+
+# also check: does the real SysML spec model already apply any stereotype to a sample attribute/end/op?
+print ""
+print "=== live check: does sampleAttr already carry any stereotype? ==="
+try:
+    exts = sampleAttr.getExtension()
+    print "extensions:", [e.getName() for e in exts]
+except Exception, e:
+    print "FAILED:", e
+print "sampleEnd extensions:"
+try:
+    print [e.getName() for e in sampleEnd.getExtension()]
+except Exception, e:
+    print "FAILED:", e
+print "sampleOp extensions:"
+try:
+    print [e.getName() for e in sampleOp.getExtension()]
+except Exception, e:
+    print "FAILED:", e

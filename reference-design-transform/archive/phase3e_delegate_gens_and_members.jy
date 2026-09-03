@@ -1,0 +1,219 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+CASES = {
+    "Association": {"primary": "Relationship", "secondaries": ["Classifier"]},
+    "AssociationStructure": {"primary": "Association", "secondaries": ["Structure"]},
+    "Connector": {"primary": "Feature", "secondaries": ["Relationship"]},
+    "Flow": {"primary": "Connector", "secondaries": ["Step"]},
+    "Interaction": {"primary": "Behavior", "secondaries": ["Association"]},
+    "MetadataFeature": {"primary": "Feature", "secondaries": ["AnnotatingElement"]},
+    "SuccessionFlow": {"primary": "Flow", "secondaries": ["Succession"]},
+    "ActionDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Behavior"]},
+    "ActionUsage": {"primary": "OccurrenceUsage", "secondaries": ["Step"]},
+    "AssertConstraintUsage": {"primary": "ConstraintUsage", "secondaries": ["Invariant"]},
+    "AttributeDefinition": {"primary": "Definition", "secondaries": ["DataType"]},
+    "BindingConnectorAsUsage": {"primary": "ConnectorAsUsage", "secondaries": ["BindingConnector"]},
+    "CalculationDefinition": {"primary": "ActionDefinition", "secondaries": ["Function"]},
+    "CalculationUsage": {"primary": "ActionUsage", "secondaries": ["Expression"]},
+    "ConnectionDefinition": {"primary": "PartDefinition", "secondaries": ["AssociationStructure"]},
+    "ConnectionUsage": {"primary": "PartUsage", "secondaries": ["ConnectorAsUsage"]},
+    "ConnectorAsUsage": {"primary": "Usage", "secondaries": ["Connector"]},
+    "ConstraintDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Predicate"]},
+    "ConstraintUsage": {"primary": "OccurrenceUsage", "secondaries": ["BooleanExpression"]},
+    "ExhibitStateUsage": {"primary": "PerformActionUsage", "secondaries": ["StateUsage"]},
+    "FlowDefinition": {"primary": "ActionDefinition", "secondaries": ["Interaction"]},
+    "FlowUsage": {"primary": "ActionUsage", "secondaries": ["ConnectorAsUsage", "Flow"]},
+    "IncludeUseCaseUsage": {"primary": "PerformActionUsage", "secondaries": ["UseCaseUsage"]},
+    "ItemDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Structure"]},
+    "MembershipExpose": {"primary": "Expose", "secondaries": ["MembershipImport"]},
+    "MetadataDefinition": {"primary": "ItemDefinition", "secondaries": ["Metaclass"]},
+    "MetadataUsage": {"primary": "ItemUsage", "secondaries": ["MetadataFeature"]},
+    "NamespaceExpose": {"primary": "Expose", "secondaries": ["NamespaceImport"]},
+    "OccurrenceDefinition": {"primary": "Definition", "secondaries": ["Class"]},
+    "PerformActionUsage": {"primary": "ActionUsage", "secondaries": ["EventOccurrenceUsage"]},
+    "PortDefinition": {"primary": "OccurrenceDefinition", "secondaries": ["Structure"]},
+    "SatisfyRequirementUsage": {"primary": "RequirementUsage", "secondaries": ["AssertConstraintUsage"]},
+    "SuccessionAsUsage": {"primary": "ConnectorAsUsage", "secondaries": ["Succession"]},
+    "SuccessionFlowUsage": {"primary": "FlowUsage", "secondaries": ["SuccessionFlow"]},
+}
+EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs_collect(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+def bfs_collect_list(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+specByName, sv = bfs_collect(specPkg, set(["Class", "Enumeration"]))
+designByName, dv = bfs_collect(designPkg, set(["Class", "Enumeration"]))
+print "spec classes:", len(specByName), "design classes (incl 39 new delegate skeletons):", len(designByName)
+
+gensList, _ = bfs_collect_list(specPkg, set(["Generalization"]))
+singleParent = {}
+for g in gensList:
+    sub = g.getSubType()
+    sup = g.getSuperType()
+    if sub is None or sup is None:
+        continue
+    subName = sub.getName()
+    if subName in CASES:
+        continue
+    singleParent[subName] = sup.getName()
+
+def get_primary_name(className):
+    if className == "Element":
+        return None
+    if className in CASES:
+        return CASES[className]["primary"]
+    return singleParent.get(className)
+
+needed = set()
+def add_chain(name):
+    cur = name
+    while cur is not None and cur not in needed:
+        needed.add(cur)
+        cur = get_primary_name(cur)
+for className, info in CASES.items():
+    if className in EXCLUDED_CLASSES:
+        continue
+    for sec in info["secondaries"]:
+        add_chain(sec)
+
+def resolve_type(srcTypeEl):
+    try:
+        nm = srcTypeEl.getName()
+    except:
+        return srcTypeEl
+    if nm in designByName:
+        return designByName[nm]
+    return srcTypeEl
+
+stats = {"Generalization": 0, "Attribute": 0, "Operation": 0}
+
+tr = modelingSession.createTransaction("Phase 3e: wire delegate generalizations + copy own members")
+try:
+    for name in needed:
+        delegateCls = designByName.get(name + "Delegate")
+        if delegateCls is None:
+            print "  WARNING: delegate skeleton missing for", name
+            continue
+
+        # Real generalization to parent's delegate (if any).
+        parentName = get_primary_name(name)
+        if parentName is not None:
+            parentDelegate = designByName.get(parentName + "Delegate")
+            if parentDelegate is not None:
+                factory.createGeneralization(delegateCls, parentDelegate)
+                stats["Generalization"] += 1
+            else:
+                print "  WARNING: parent delegate missing for", name, "->", parentName
+
+        # Own direct members only (no flattening - the chain is real now).
+        specEl = specByName.get(name)
+        if specEl is None or specEl.getMClass().getName() != "Class":
+            continue
+        for attr in specEl.getOwnedAttribute():
+            newAttr = factory.createAttribute()
+            newAttr.setName(attr.getName())
+            newAttr.setType(resolve_type(attr.getType()))
+            try:
+                newAttr.setMultiplicityMin(attr.getMultiplicityMin())
+                newAttr.setMultiplicityMax(attr.getMultiplicityMax())
+            except:
+                pass
+            delegateCls.getOwnedAttribute().add(newAttr)
+            stats["Attribute"] += 1
+        for op in specEl.getOwnedOperation():
+            newOp = factory.createOperation(op.getName(), delegateCls)
+            for p in op.getIO():
+                newParam = factory.createParameter()
+                newParam.setName(p.getName())
+                newParam.setType(resolve_type(p.getType()))
+                newOp.getIO().add(newParam)
+            ret = op.getReturn()
+            if ret is not None:
+                factory.createReturnParameter("", resolve_type(ret.getType()), newOp)
+            stats["Operation"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

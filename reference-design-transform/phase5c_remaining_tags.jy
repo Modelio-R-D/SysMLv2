@@ -1,0 +1,92 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+sysmlSpecComp = find_child(specPkg, "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+def set_tag(element, tagType, value):
+    newTagValue = factory.createTaggedValue()
+    newParam = factory.createTagParameter()
+    newParam.setValue(value)
+    newTagValue.getActual().add(newParam)
+    newTagValue.setDefinition(tagType)
+    element.getTag().add(newTagValue)
+
+designComps, _ = bfs_collect_list(designPkg, set(["Component"]))
+designClasses, _ = bfs_collect_list(designPkg, set(["Class"]))
+print "design components:", len(designComps), "design classes:", len(designClasses)
+
+isExtTagType = mmExt.getTagType(moduleName, "Metamodel.isExtension", designComps[0].getMClass())
+structNodeTagType = mmExt.getTagType(moduleName, "Semantic.structural.node", designClasses[0].getMClass())
+print "isExtTagType:", isExtTagType
+print "structNodeTagType:", structNodeTagType
+
+stats = {"isExtension": 0, "structural.node": 0}
+
+tr = modelingSession.createTransaction("Phase 5c: Metamodel.isExtension + Semantic.structural.node")
+try:
+    for comp in designComps:
+        set_tag(comp, isExtTagType, "true")
+        stats["isExtension"] += 1
+    for cls in designClasses:
+        set_tag(cls, structNodeTagType, "true")
+        stats["structural.node"] += 1
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

@@ -1,0 +1,139 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+# Build name -> live object maps for both spec (Class/Enumeration) and design (Class/Enumeration),
+# via BFS, not UUID lookup - matches patterns already proven reliable this session.
+def bfs_collect(root, mclasses, max_nodes=6000):
+    q = deque([root])
+    seen = set()
+    byName = {}
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                byName[el.getName()] = el
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return byName, visited
+
+specByName, sv = bfs_collect(specPkg, set(["Class", "Enumeration"]), max_nodes=6000)
+designByName, dv = bfs_collect(designPkg, set(["Class", "Enumeration"]), max_nodes=6000)
+print "spec classes/enums:", len(specByName), "design classes/enums:", len(designByName)
+
+stats = {"Attribute": 0, "Operation": 0, "Parameter": 0, "ReturnParameter": 0, "EnumerationLiteral": 0,
+         "attr_type_primitive": 0, "attr_type_resolved": 0, "attr_type_unresolved": 0,
+         "param_type_primitive": 0, "param_type_resolved": 0, "param_type_unresolved": 0}
+unresolved_types = set()
+
+def resolve_type(srcTypeEl):
+    # If it's one of our copied classes/enums, use the design-side counterpart by name.
+    # Otherwise it's a shared/primitive type (String, Boolean, ...) - reuse the same reference directly.
+    try:
+        nm = srcTypeEl.getName()
+    except:
+        return srcTypeEl, False
+    if nm in designByName:
+        return designByName[nm], True
+    return srcTypeEl, False
+
+tr = modelingSession.createTransaction("Phase 2: copy attributes, operations, enum literals")
+try:
+    for name, newEl in designByName.items():
+        srcEl = specByName.get(name)
+        if srcEl is None:
+            continue
+        mcls = srcEl.getMClass().getName()
+
+        if mcls == "Enumeration":
+            for lit in srcEl.getCompositionChildren():
+                try:
+                    if lit.getMClass().getName() != "EnumerationLiteral":
+                        continue
+                except:
+                    continue
+                factory.createEnumerationLiteral(lit.getName(), newEl)
+                stats["EnumerationLiteral"] += 1
+            continue
+
+        # Class: copy Attributes
+        for attr in srcEl.getOwnedAttribute():
+            newAttr = factory.createAttribute()
+            newAttr.setName(attr.getName())
+            resolvedType, wasResolved = resolve_type(attr.getType())
+            newAttr.setType(resolvedType)
+            if wasResolved:
+                stats["attr_type_resolved"] += 1
+            else:
+                stats["attr_type_primitive"] += 1
+            try:
+                newAttr.setMultiplicityMin(attr.getMultiplicityMin())
+                newAttr.setMultiplicityMax(attr.getMultiplicityMax())
+            except Exception, e:
+                pass
+            newEl.getOwnedAttribute().add(newAttr)
+            stats["Attribute"] += 1
+
+        # Class: copy Operations (signature only - no OCL body, per agreed scope)
+        for op in srcEl.getOwnedOperation():
+            newOp = factory.createOperation(op.getName(), newEl)
+            for p in op.getIO():
+                newParam = factory.createParameter()
+                newParam.setName(p.getName())
+                resolvedType, wasResolved = resolve_type(p.getType())
+                newParam.setType(resolvedType)
+                if wasResolved:
+                    stats["param_type_resolved"] += 1
+                else:
+                    stats["param_type_primitive"] += 1
+                newOp.getIO().add(newParam)
+                stats["Parameter"] += 1
+            ret = op.getReturn()
+            if ret is not None:
+                resolvedType, wasResolved = resolve_type(ret.getType())
+                factory.createReturnParameter("", resolvedType, newOp)
+                stats["ReturnParameter"] += 1
+            stats["Operation"] += 1
+
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "stats:", stats
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()
