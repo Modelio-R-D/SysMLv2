@@ -154,6 +154,13 @@ Relecture des 19 classes du package `infrastructure` face aux 182 classes de `re
 
 **Compromis assumé à documenter — perte de substituabilité polymorphique Java 🆕** : avec ce patron, une classe comme `AttributeDefinition` n'*est plus* un `DataType` au sens Java (pas d'`instanceof`, pas de passage en paramètre typé `DataType`, pas de collection `List<DataType>` qui la contiendrait implicitement) — elle *a* un `DataType`, accessible via un accesseur dédié (ex. `getDataType()`). Tout algorithme qui reposerait sur une polymorphie générique de l'axe secondaire (recherche de tous les `DataType` du modèle, vérifications de type génériques) devra explicitement passer par cet accesseur. **À vérifier avant généralisation** : existe-t-il aujourd'hui, ou dans les besoins de l'équipe parsing (Bilal, cf. 5.2), des algorithmes qui présupposent cette polymorphie ? Si oui, prévoir une convention de nommage uniforme des accesseurs pour limiter la friction.
 
+**Réserves précisées par Cédric Marin (échange post-réunion) 🆕** : interrogé sur ses doutes (perte d'information ? polymorphisme perdu ?), Cédric recadre le vrai risque : *« Multiplication du nombre d'éléments de modèle qui représentent un seul élément, avec des conséquences sur : les performances, la consommation mémoire, des contrôles de cohérence supplémentaires (ne pas laisser quelqu'un créer un morceau sans l'autre, et qu'ils soient reliés entre eux), API de façade pour que ça ne se voie pas. »* Concrètement :
+- **Performance/mémoire** : chaque instance utilisateur des 34 cas crée un objet composé supplémentaire — sur un modèle système de grande taille, ce n'est pas négligeable (potentiellement des dizaines de milliers d'objets « fantômes » en plus).
+- **Cohérence** : l'objet composé pourrait être supprimé ou désynchronisé indépendamment de son primaire — nécessite des **règles d'audit dédiées** (probablement bloquantes/synchrones, cf. Partie 4.6) pour garantir que les deux existent et restent liés ensemble.
+- **Façade API** : confirme le besoin déjà identifié d'accesseurs uniformes, mais formulé plus explicitement comme une vraie couche de façade à concevoir, pas juste une convention de nommage.
+
+**Contexte stratégique motivant cette exigence 🆕** : Cédric rappelle que Modelio a déjà, il y a 15 ans, implementé UML2 « en taillant à la hache », sans respecter le métamodèle de la norme, **à cause de ce même problème d'héritage multiple**. Il constate que SysML v2 hérite du même problème (via UML2) et souhaite le régler à la source cette fois — motivé en partie par la concurrence (un outil Dassault revendiquerait une conformité à 100 % à la norme), pour éviter d'être bloqué plus tard si un client demande un meilleur support d'une partie du spec.
+
 **Point de vigilance UX 🆕** : l'instance composée est un vrai élément persisté (propre identité, propre place dans l'arbre de composition). À trancher : faut-il la masquer dans les vues standard de l'explorateur de modèle Modelio pour éviter qu'un utilisateur SysML v2 final ne voie apparaître un enfant technique (ex. un `DataType` sous chaque `AttributeDefinition`) sans rapport avec son intention de modélisation — même famille de risque que la remarque de Fadwa en 2.3 sur `PropertyTable`/Metadata ?
 
 **Conséquence pratique sur le script 🆕** : le script de transformation `reference → implementation` (Partie 4) doit produire, pour chaque cas, une classe avec un seul `extends` réel (axe primaire) + une association composite vers la vraie classe secondaire (jamais un second `extends`/`implements`, jamais de classe déléguée synthétique) — stéréotype `Semantic` aux deux bouts, conformément aux conventions déjà décrites en 4.2.
@@ -163,11 +170,13 @@ Relecture des 19 classes du package `infrastructure` face aux 182 classes de `re
 - Valide-t-on une convention de nommage uniforme pour les accesseurs de la facette secondaire (ex. nommés d'après le type secondaire) ?
 - Décide-t-on de masquer ou non ces associations techniques dans les vues utilisateur standard de Modelio ?
 
-### 3.2 Piste d'évolution outillage 🆕 (largement caduque pour ce besoin)
+### 3.2 Piste d'évolution outillage 🆕 (réouverte)
 
-Juan proposait initialement de **contribuer à SemGen** pour qu'il applique automatiquement un pattern de délégation plutôt que de traiter les 34 cas à la main. **Mise à jour 🆕** : le patron d'association composée retenu en 3.1 fonctionne avec SemGen **tel qu'il existe aujourd'hui**, sans aucune évolution outillage nécessaire — cette piste perd donc l'essentiel de son intérêt pour ce besoin précis. Elle pourrait rester pertinente pour d'autres métamodèles futurs présentant un héritage multiple, mais n'est plus un prérequis ni une urgence pour ce projet.
+Juan proposait initialement de **contribuer à SemGen** pour qu'il applique automatiquement un pattern de délégation plutôt que de traiter les 34 cas à la main. Conclusion précédente : le patron d'association composée retenu en 3.1 fonctionne avec SemGen tel qu'il existe aujourd'hui, rendant cette piste largement caduque pour ce besoin précis.
 
-**Question à trancher** : maintient-on cette piste dans le backlog long terme (bénéfice : futurs métamodèles), ou l'abandonne-t-on complètement puisque le blocage initial est résolu autrement ?
+**Rebondissement 🆕** : suite aux réserves de Cédric précisées en 3.1 (performance, mémoire, cohérence), **Juan** (qui avait déjà proposé cette piste initialement, cf. historique ci-dessus) y revient en clôture d'échange, en ouverture de la discussion prévue le lendemain : *« ceci dit, en ouvre-bouche, je crois qu'il faudra bien modifier le générateur SemGen pour gérer ces cas d'héritage multiple. »* La piste n'est donc plus caduque — elle redevient une option à examiner sérieusement, potentiellement pour répondre directement aux réserves de performance/cohérence de Cédric plutôt que de les traiter uniquement via des règles d'audit compensatoires (cf. 4.6).
+
+**Question à trancher** : programme-t-on une évolution de SemGen pour traiter nativement l'héritage multiple (bénéfice : répond aux réserves de Cédric à la racine, futurs métamodèles), ou maintient-on le patron d'association composée actuel en le compensant par des règles d'audit de cohérence (4.6) ? Point à trancher lors du point d'avancement dédié à ce sujet (Juan et Cédric).
 
 ### 3.3 Les 34 résolutions individuelles
 
@@ -270,6 +279,47 @@ Fadwa a rédigé une documentation technique sur l'usage de SemGen. Cédric deva
 
 **Action à faire** : terminer la validation par Cédric Marin et intégrer cette documentation comme référence officielle du processus SemGen dans ce projet, en complément de la Partie 4.2 ci-dessus.
 
+### 4.5 Implémentation des bibliothèques normatives (Kernel Semantic Library / Systems Model Library) 🆕
+
+**Constat** : KerML et SysML v2 ne sont pas *seulement* des métamodèles abstraits (les 182 classes de `reference` déjà couvertes Parties 1 à 3) — chacun s'accompagne d'une **bibliothèque de modèles normative** que toute métaclasse concrète doit obligatoirement spécialiser :
+- KerML impose la **Kernel Semantic Library** (`Base`, `Links`, `Occurrences`, `Objects`, `Performances`, `Transfers`… — détaillée dans [kerml-sysml-metamodeles-detailles.md](../docs/kerml-sysml-metamodeles-detailles.md), Partie 3).
+- SysML v2 impose par-dessus sa propre **Systems Model Library** (`Parts::Part`, `Ports::Port`, `Actions::Action`, `Requirements::RequirementCheck`… — même document, Partie 4.2), qui spécialise elle-même en cascade la Kernel Semantic Library.
+
+**Pourquoi c'est obligatoire, pas une simple bonne pratique** : les deux specs truffent leurs métaclasses de contraintes du type `specializesFromLibrary('Base::Anything')`, `specializesFromLibrary('Parts::Part')`, `specializesFromLibrary('Occurrences::happensBeforeLinks')`, etc. — déjà rencontrées des dizaines de fois dans les deux études comparatives. Ce ne sont pas des suggestions : ce sont des **contraintes de conformité normatives**. Concrètement, une `PartDefinition` qui ne spécialise pas (directement ou indirectement) `Parts::Part` de la Systems Model Library **n'est pas un modèle SysML v2 valide**, quelle que soit la justesse de son implémentation Java par ailleurs. **Sans une instance réelle de ces bibliothèques présente dans le projet, aucun modèle utilisateur ne peut satisfaire ces contraintes** — la validité de tout modèle SysML v2 en dépend structurellement, pas seulement son « exhaustivité » ou sa « qualité ».
+
+**Conséquence pratique pour l'implémentation Modelio** : il ne suffit pas de générer les métaclasses `implementation` (Parties 1 à 4) — il faut aussi **fournir, comme contenu de départ de tout projet SysML v2, les paquetages réels des deux bibliothèques**, avec leurs éléments (`Anything`, `Part`, `happensBeforeLinks`…) réellement instanciés et navigables, faute de quoi le mécanisme `specializesFromLibrary(...)` n'a tout simplement rien à cibler. C'est l'équivalent, côté Modelio, de ce qui existe déjà pour d'autres métamodèles (bibliothèques de types prédéfinis livrées avec un module) — mais ici la couverture doit être complète : chaque des ~20 packages de la Systems Model Library (Parts, Ports, Connections, Interfaces, Allocations, Flows, Actions, States, Calculations, Constraints, Requirements, Cases, AnalysisCases, VerificationCases, UseCases, Views, StandardViewDefinitions, Metadata…) et des ~6 packages de la Kernel Semantic Library (Base, Links, Occurrences, Objects, Performances, Transfers…) doit exister comme contenu réel, pas seulement comme référence documentaire.
+
+**Questions ouvertes à trancher** :
+- **Mode de livraison — affiné par le retour d'expérience SysML v1 (réunion Étienne Brosse, 25/08) 🆕** : la question « contenu par défaut vs module chargé à la demande » se résout différemment selon la bibliothèque concernée, une fois la distinction Systems Model Library / Domain Libraries prise en compte (cf. §4.3 du document [kerml-sysml-metamodeles-detailles.md](../docs/kerml-sysml-metamodeles-detailles.md)) :
+  - La **Systems Model Library cœur** (celle portant les contraintes `specializesFromLibrary` obligatoires — `Parts`, `Ports`, `Actions`…) doit être **systématique et automatique** pour tout `SysMLProject`, sans action utilisateur — le principe reste inchangé.
+  - Les **Domain Libraries optionnelles** (`Quantities and Units`, `Cause and Effect`, `Analysis`, `Requirement Derivation`…), elles-mêmes explicitement facultatives dans la spec (*« a conformant tool may provide one or more domain libraries »*), peuvent en revanche suivre le précédent déjà établi en SysML v1 chez Modelio : Étienne confirme que la bibliothèque SI (unités) de SysML v1 est un modèle construit dans un projet séparé, **packagé en `.jmdac`** et embarqué (ou proposé en déploiement à la demande) plutôt que dupliqué dans chaque projet. Étienne envisage explicitement de reproduire ce patron pour SysML v2 : *« ça sera peut-être pas à embarquer à chaque fois avec le métamodèle, mais une collection de [modules] à offrir [...] et se permettre d'offrir peut-être au client de déployer telle librairie pour s'en servir. »*
+  - **Mécanisme technique confirmé (pas juste supposé)** : le précédent SysML v1 valide bien l'option « paquetage partagé, packagé en module Modelio (`.jmdac`), livré/déployé indépendamment » comme un mécanisme réel et déjà pratiqué chez Modelio — ça répond au point qui restait non vérifié précédemment.
+- **Format d'échange normatif identifié 🆕** : Fadwa a confirmé que les bibliothèques SysML v2 (et plus généralement tout modèle SysML v2 conforme) sont distribuées/échangées sous le format **`.kpar`** (« KerML/SysML Project Archive »), le format d'interchange normatif exigé par la clause de conformité de la spec (*« every conformant SysML modeling tool shall demonstrate at least abstract syntax conformance »* via ce format) — cf. aussi `9.1` de `kerml.txt` sur les fichiers d'interchange normatifs, dont on a maintenant le nom concret. La **SysML v2 Pilot Implementation** (implémentation de référence de l'OMG) sait déjà parser ce format — ressource à évaluer pour l'équipe parsing (Bilal) et/ou pour importer directement le contenu des bibliothèques plutôt que de le reconstruire à la main.
+- **Séquencement confirmé par Étienne 🆕** : l'import/export `.kpar` ne peut **pas** être construit avant d'avoir un métamodèle `implementation` fonctionnel avec un éditeur capable d'instancier réellement les métaclasses (« tu peux pas faire l'import-export tant que t'as pas un méta modèle avec la possibilité de créer des instances de tes métaclasses ») — confirme que ce chantier est **postérieur** aux Parties 1 à 4 de cette spec, pas un prérequis.
+- **Origine du contenu** : génère-t-on ces paquetages **automatiquement** à partir des fichiers d'interchange `.kpar` normatifs publiés par l'OMG (la spec précise que chaque bibliothèque a une représentation machine-lisible normative, avec des `elementId` UUID stables calculés par une règle précise — cf. `9.1` de `kerml.txt`), ou les reconstruit-on manuellement dans Modelio ? La première option garantit la conformité aux UUID normatifs (traçabilité/interopérabilité avec d'autres outils SysML v2, et réutilise directement le format déjà identifié ci-dessus), la seconde est plus rapide mais risque des divergences.
+- **Statut en écriture** : ces paquetages doivent-ils être **protégés en lecture seule** pour l'utilisateur final (cohérent avec leur rôle de référence normative), avec un mécanisme de mise à jour centralisé si l'OMG publie une révision ?
+- **Impact sur le script de transformation** (4.1) : le script doit-il aussi importer/générer ces bibliothèques, ou est-ce un chantier séparé mené en parallèle ?
+
+### 4.6 Étapes post-génération SemGen — intégration plugin Eclipse complète 🆕
+
+Checklist technique transmise par Cédric Marin (basée sur les modules existants `Analyst` et `ArchiMate`) — ce qui reste à faire **après** que SemGen/Java Architect aient généré `mm.api`/`mm.impl` (Partie 4.1-4.3), avant d'avoir un module SysML v2 utilisable dans Modelio :
+
+| Étape | Détail | Exemple de référence |
+|---|---|---|
+| Accesseurs manuels | Compléter les getters/setters non couverts par la génération automatique (ex. accesseurs de facette secondaire des associations composées, cf. 3.1) | — |
+| Règles d'audit **bloquantes** (synchrones) | Contrôles de cohérence qui empêchent l'action si violés — candidat naturel pour garantir la cohérence primaire/composé exigée par Cédric (3.1) | `org.modelio.metamodel.impl.mmextensions.analyst.modelshield.AnalystCheckerFactory` |
+| Règles d'audit **non bloquantes** (asynchrones) | Avertissements affichés a posteriori, sans bloquer l'utilisateur | `org.modelio.archimate.ui.audit.ArchimateAuditExtension` |
+| Points d'extension du métamodèle | Code Java branchant un comportement personnalisé sur le métamodèle généré, via les services héritant de `org.modelio.vcore.smkernel.mapi.services.IMetamodelDependentService` (points d'extension Eclipse) | `org.modelio.metamodel.impl.mmextensions.analyst.AnalystMetamodelExtension` |
+| IHM — icônes/images | Point d'extension `org.modelio.platform.model.ui.element.imageprovider`, interfaces `IElementImageProvider`/`IMetamodelImageProvider` | `org.modelio.archimate.ui.image.ArchimateElementImageProvider` |
+| IHM — labels (arbre du modèle) | Point d'extension `org.modelio.platform.model.ui.labelprovider`, classe implémentant `IModelioElementLabelProvider` | `org.modelio.archimate.ui.browser.contrib.ArchimateBrowserLabelProvider` (déclaré dans `archimate.ui/plugin.xml`) |
+| IHM — boîte de propriétés | Fournisseur dédié | `org.modelio.archimate.ui.modelproperty.ArchimatePropertyModelProvider` |
+| IHM — menu « Create element » | Menu contextuel de création dédié | `org.modelio.archimate.ui.browser.context.ElementCreationDynamicMenuManager` |
+| Diagrammes spécifiques | Éditeurs graphiques dédiés SysML v2 | — |
+
+**Point de séquencement 🆕** : cette checklist s'ajoute à la mise en place des plugins elle-même, à traiter dans un premier temps selon Cédric — confirme que l'intégration Eclipse complète (au-delà de la seule génération du métamodèle) est un chantier à part entière, distinct des Parties 1 à 3.
+
+**Action à faire** : programmer un point d'avancement dédié à l'héritage multiple avec Cédric (réserves de performance/mémoire/cohérence, cf. 3.1, et réévaluation de la piste SemGen, cf. 3.2).
+
 ---
 
 ## Partie 5 — Organisation du projet 🆕
@@ -314,8 +364,8 @@ Cf. Partie 3.3 — généraliser la pratique à **tous** les concepts couverts p
 | 8 | `PropertyTable` (pas TaggedValue) pour `MetadataDefinition/Usage` | 2.3 | Critique |
 | 9 | Vue IHM dédiée « Metadata » pour ne pas perdre l'utilisateur | 2.3 | Normale |
 | 10 | Pas de 4ᵉ chevauchement à traiter | 2.4 | Normale |
-| 11 | Patron d'association composée pour héritage multiple (remplace le pattern délégué) + convention de nommage des accesseurs | 3.1 | Critique |
-| 12 | Maintenir ou abandonner la piste d'évolution SemGen (largement caduque) | 3.2 | Faible |
+| 11 | Patron d'association composée pour héritage multiple, face aux réserves de Cédric (performance/mémoire/cohérence) | 3.1 | Critique |
+| 12 | Réévaluer l'évolution de SemGen pour l'héritage multiple (piste rouverte) vs compenser par des règles d'audit | 3.2 | Critique |
 | 13 | Revue cas par cas des 34 résolutions (avec exemples) | 3.3 | Normale |
 | 14 | Structure finale du livrable (spec seule ou + exigences Modelio) | 5.1 | Normale |
 | 15 | Canal de communication avec l'équipe parsing | 5.2 | Critique |
