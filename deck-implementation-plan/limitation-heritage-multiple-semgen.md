@@ -2,6 +2,8 @@
 
 Document de travail préparé suite à la réserve de Cédric Marin sur l'approche actuelle de résolution des 34 cas d'héritage multiple. Objectif : poser le problème concrètement, avec des exemples réels tirés du modèle, avant la discussion.
 
+> **Statut** : présenté à Cédric Marin. Recommandation §7 point 3 acceptée — Cédric a transmis le code source de SemGen pour le patch. Le correctif est en cours, dans le dépôt SemGen lui-même (hors de ce workspace de transformation du modèle).
+
 ---
 
 ## 1. Le problème, sur un exemple concret
@@ -159,4 +161,6 @@ Poser clairement la question comme un choix d'équipe, pas une décision déjà 
 
 1. **Court terme** : garder l'association composée (déjà validée, génère proprement), documentée explicitement comme un contournement temporaire — pas une solution conforme à la norme.
 2. **Moyen terme, si le contenu perdu (8 cas) pose un vrai problème d'usage** : ajouter la délégation manuelle pour ces 8 cas précisément.
-3. **Le vrai sujet, à porter au niveau outillage (pas ce projet)** : faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation — la seule option qui règle vraiment les 4 points de Cédric en même temps, et qui rapprocherait Modelio d'une conformité réelle à la norme. Périmètre du correctif maintenant confirmé au niveau code source (§5) : six générateurs à faire boucler sur tous les parents, plus une décision de conception restant à trancher pour `XImpl` — pas une exploration à refaire, un chantier à cadrer.
+3. **Le vrai sujet, à porter au niveau outillage (pas ce projet)** : faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation — la seule option qui règle vraiment les 4 points de Cédric en même temps, et qui rapprocherait Modelio d'une conformité réelle à la norme. Périmètre du correctif confirmé au niveau code source (§5) : six générateurs à faire boucler sur tous les parents, plus une décision de conception restant à trancher pour `XImpl`.
+
+**Retenu** : Cédric a accepté ce point 3 et transmis le code source de SemGen pour le patcher. Le correctif est en cours dans le dépôt SemGen — voir §6 pour le périmètre exact des points d'appel à modifier.
