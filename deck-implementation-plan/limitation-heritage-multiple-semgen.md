@@ -2,7 +2,7 @@
 
 Document de travail préparé suite à la réserve de Cédric Marin sur l'approche actuelle de résolution des 34 cas d'héritage multiple. Objectif : poser le problème concrètement, avec des exemples réels tirés du modèle, avant la discussion.
 
-> **Statut** : présenté à Cédric Marin. Recommandation §7 point 3 acceptée — Cédric a transmis le code source de SemGen pour le patch. Le correctif est en cours, dans le dépôt SemGen lui-même (hors de ce workspace de transformation du modèle).
+> **Statut** : présenté à Cédric Marin, qui a transmis le code source de SemGen. Sur décision de Juan (pas une consigne de Cédric), un **prototype** de correctif a été écrit dans `ApiGenerator.java` (`doGenerateInheritance` boucle désormais sur tous les parents et émet une `Generalization` par parent, au lieu de s'arrêter à l'index 0) — **non validé** : pas encore compilé ni testé contre un vrai modèle, et seule la couche interface `mm.api` est traitée à ce stade (les 5 autres générateurs listés en §5 — `MonogeApiGenerator`, `MetaclassGenerator`, `MetaclassLoadGenerator`, `DataGenerator`/`MonogeDataGenerator`, plus la décision de conception pour `ImplGenerator`/`XImpl` — restent à faire). Risque signalé côté SemGen : `ApiGenerator.java` porte des annotations `@objid`, ce qui suggère qu'il pourrait être généré/régénéré depuis un modèle Modelio de SemGen lui-même — si un tel modèle existe, cette modification manuelle du `.java` risque d'être écrasée à la prochaine régénération, à vérifier avant d'aller plus loin.
 
 ---
 
@@ -163,4 +163,4 @@ Poser clairement la question comme un choix d'équipe, pas une décision déjà 
 2. **Moyen terme, si le contenu perdu (8 cas) pose un vrai problème d'usage** : ajouter la délégation manuelle pour ces 8 cas précisément.
 3. **Le vrai sujet, à porter au niveau outillage (pas ce projet)** : faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation — la seule option qui règle vraiment les 4 points de Cédric en même temps, et qui rapprocherait Modelio d'une conformité réelle à la norme. Périmètre du correctif confirmé au niveau code source (§5) : six générateurs à faire boucler sur tous les parents, plus une décision de conception restant à trancher pour `XImpl`.
 
-**Retenu** : Cédric a accepté ce point 3 et transmis le code source de SemGen pour le patcher. Le correctif est en cours dans le dépôt SemGen — voir §6 pour le périmètre exact des points d'appel à modifier.
+**Retenu** : Cédric a transmis le code source de SemGen ; un prototype de correctif existe désormais pour la couche interface (`ApiGenerator.java`), non validé et partiel — voir le statut en tête de document pour le détail (ce qui est fait, ce qui reste, et le risque de régénération `@objid`).
