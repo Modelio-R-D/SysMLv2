@@ -130,9 +130,68 @@ Réponse Antonin/Cédric : possible de renommer/adapter l'IHM (vues de propriét
 
 ### 2.4 Bilan des chevauchements
 
-Relecture des 19 classes du package `infrastructure` face aux 182 classes de `reference` : aucun autre chevauchement conceptuel net trouvé. Le reste se répartit en (a) plomberie de support des 3 chevauchements ci-dessus (`NoteType`, `TagType`, `TagParameter`, `MetaclassReference`), et (b) concepts propres à Modelio sans équivalent (`Resource`/`Document`, `ExternProcessor`, `Profile`, `MethodologicalLink`). `AbstractProject` déjà couvert en 1.2.
+Relecture des 19 classes du package `infrastructure` face aux 182 classes de `reference` : aucun autre chevauchement conceptuel net trouvé **à l'époque de la réunion du 27/08**. Le reste se répartit en (a) plomberie de support des 3 chevauchements ci-dessus (`NoteType`, `TagType`, `TagParameter`, `MetaclassReference`), et (b) concepts propres à Modelio sans équivalent (`Resource`/`Document`, `ExternProcessor`, `Profile`, `MethodologicalLink`). `AbstractProject` déjà couvert en 1.2.
 
-**Question à trancher** : confirme-t-on qu'il n'y a pas de 4ᵉ chevauchement à traiter (les 3 exemples de cette partie ont été vérifiés en réunion et jugés vraisemblablement corrects, sous réserve d'exemples complets à valider) ?
+**Mise à jour 🆕 — 4 chevauchements supplémentaires trouvés par vérification directe sur l'instance Modelio live** (au-delà du seul package `infrastructure` — l'analyse initiale ne couvrait pas `statik`, `stateMachineModel`, `usecaseModel`, `informationFlow`) : cf. Parties 2.5 à 2.8 ci-dessous. **Point méthodologique important** : la documentation scrapée localement (`Modelio-API-Markdown-CHUB`) s'est révélée incomplète sur le package `stateMachineModel` (aucune classe `State`/`Transition`/`Region` recensée) — vérifié et corrigé par introspection directe de l'instance Modelio live via le ScriptServer plutôt que via la documentation seule. **Recommandation** : ne plus se fier uniquement à la documentation scrapée pour affirmer l'absence d'un concept Modelio — vérifier sur l'instance live avant de conclure à un chevauchement manquant.
+
+**Question à trancher** : confirme-t-on qu'il n'y a pas de 4ᵉ chevauchement à traiter *dans le périmètre `infrastructure`* (les 3 exemples de cette partie ont été vérifiés en réunion et jugés vraisemblablement corrects) — sachant que le périmètre complet (au-delà d'`infrastructure`) contient au moins 4 chevauchements de plus, désormais documentés ?
+
+### 2.5 États/Transitions SysML v2 → `State`/`Transition`/`Region` (stateMachineModel) 🆕
+
+**Découverte** : Modelio possède nativement `State`, `Transition`, `Region`, `StateMachine`, `StateVertex` dans `org.modelio.metamodel.uml.behavior.stateMachineModel` — absents de toute documentation locale scrapée (trou de documentation, pas une absence réelle, cf. 2.4).
+
+**Vérification API précise (introspection Java réelle)** :
+
+| Concept SysML v2 | Attribut/relation | Candidat Modelio | Verdict |
+|---|---|---|---|
+| `TransitionUsage.source`/`.target` | — | `Transition.getSource()`/`.getTarget()` | ✅ correspondance directe |
+| `TransitionUsage.guardExpression` | — | `Transition.getGuard()` | ✅ correspondance directe |
+| `TransitionUsage.triggerAction` | — | `Transition.getTrigger()` | ✅ correspondance directe |
+| `TransitionUsage.effectAction` | — | `Transition.getEffect()`/`getEffects()`/`getBehaviorEffect()` | ✅ correspondance directe |
+| `StateDefinition.entryAction`/`.doAction`/`.exitAction` | — | *Aucun accesseur équivalent trouvé sur `State`* (`getEntryPoint()`/`getExitPoint()` sont des points de connexion de pseudo-états, pas des comportements) | ❌ manque structurel net |
+| `StateUsage.isParallel` (régions parallèles via un booléen plat) | — | `Region` (objet dédié, régions orthogonales structurées) | ⚠️ décalage de paradigme — SysML aplati en booléen ce que Modelio structure en objets `Region` séparés |
+
+**Verdict global** : `Transition` est un **excellent candidat** (4/4 attributs clés correspondent). `State` est un **candidat partiel** — la coquille structurelle (imbrication, régions, transitions entrantes/sortantes) correspond bien, mais **le rattachement des comportements d'entrée/sortie/activité manque** dans l'API observée (à revérifier — peut-être porté autrement, ex. stéréotype ou attaché à un état via un mécanisme non standard).
+
+**Question à trancher** : confirmer précisément comment (ou si) `State` de Modelio permet de rattacher un comportement à l'entrée/la sortie/l'activité — avant de valider ou d'écarter ce mapping pour `StateDefinition`/`StateUsage`.
+
+### 2.6 AssociationStructure/ConnectionDefinition → `ClassAssociation` (statik) 🆕
+
+**Découverte clé** : `ClassAssociation` (*« A ClassAssociation is represented in UML as a Class that plays the role of an Association »*) — vérifié par introspection : **implémente uniquement `UmlModelElement`, pas `Class` ni `Association`**. Sa structure réelle :
+
+```
+ClassAssociation implements UmlModelElement {
+    getClassPart() / setClassPart(Class)            // la facette Class, cardinalité 1
+    getAssociationPart() / setAssociationPart(...)   // la facette Association, cardinalité 1
+    getNaryAssociationPart() / setNaryAssociationPart(...)  // variante n-aire
+}
+```
+
+**Pourquoi c'est une découverte importante pour la Partie 3** : `ClassAssociation` **résout exactement le même problème que `AssociationStructure`** (un concept qui est à la fois une classe et une association) — et Modelio l'a résolu **avec le même patron que le nôtre** : pas un double `extends`, mais une classe porteuse avec une **association composée vers chaque facette** (`ClassPart`, `AssociationPart`), chacune de cardinalité 1. **C'est un précédent historique interne à Modelio qui valide directement le choix retenu en Partie 3.1** — argument concret à faire valoir à Cédric : le patron d'association composée n'est pas une improvisation pour ce projet, Modelio l'a déjà utilisé pour résoudre le même type de problème structurel sur `ClassAssociation`.
+
+**Cardinalité** : `ClassPart`/`AssociationPart` sont singuliers (pas de liste) — correspond exactement à la cardinalité attendue pour `AssociationStructure` (une seule facette `Structure`, cf. cas #2 déjà résolu de la même manière).
+
+**Question à trancher** : remplace-t-on l'association composée générique déjà mise en place pour `AssociationStructure`/`ConnectionDefinition` (Partie 3.1, cas #2/#15) par un alias direct sur `ClassAssociation`, qui porte déjà nativement ce même patron avec du code Modelio existant (potentiel gain de développement) ?
+
+### 2.7 UseCaseDefinition/UseCaseUsage → `UseCase` + `UseCaseDependency` (usecaseModel) 🆕
+
+**Vérification API** : `UseCase implements GeneralClass` — un `Classifier` UML générique standard, sans attribut dédié pour acteur/sujet/objectif (confirme le constat déjà fait dans l'étude SysML : bon socle, mais la richesse de paramétrage de `CaseDefinition` — `subjectParameter`, `actorParameter`, `objectiveRequirement` — devra être ajoutée par-dessus, rien de prêt à l'emploi côté Modelio pour cette partie).
+
+`UseCaseDependency` : `getOrigin()`/`setOrigin()`, `getTarget()`/`setTarget()` — relation **strictement binaire** (comme toute la famille `Dependency`, cf. Partie 2.2). Convient bien à `IncludeUseCaseUsage` (une inclusion relie toujours exactement 2 `UseCaseUsage`).
+
+**Question à trancher** : valide-t-on `UseCase` comme alias direct pour le socle de `UseCaseDefinition`/`UseCaseUsage`, avec développement complémentaire pour la couche paramétrage héritée de `CaseDefinition` ?
+
+### 2.8 FlowDefinition/FlowUsage → `DataFlow`/`InformationFlow` (informationFlow) 🆕
+
+**Vérification API** :
+- `DataFlow` : `getOrigin()`/`setOrigin()`, `getDestination()`/`setDestination()` — **strictement binaire** (1 origine, 1 destination), mais **sans attribut de type de payload** — juste un lien brut entre 2 éléments.
+- `InformationFlow` : `getInformationSource()`, `getInformationTarget()`, `getConveyed()` (le ou les `InformationItem` transportés), `getChannel()`, plus des accesseurs de **réalisation** (`getRealizingActivityEdge()`, `getRealizingMessage()`, `getRealizingLink()`…) — suggère un concept **plus abstrait/logique**, réalisé concrètement par d'autres liens de plus bas niveau.
+
+**Comparaison avec `Flow` KerML** : `Flow.flowEnd` est plafonné à 2 (*« A FlowDefinition may not have more than two flowEnds »*, déjà noté en Partie 3.3) — donc **binaire par construction**, ce qui correspond bien à `DataFlow` (strictement binaire) plutôt qu'à `InformationFlow` (potentiellement multi-source/cible selon la cardinalité réelle de `getInformationSource()`/`getInformationTarget()`, à vérifier). `InformationItem` (implémente `Classifier` complet) pourrait correspondre au type du `payloadFeature` de `Flow`.
+
+**Verdict** : ⚠️ équivalent partiel — `DataFlow` correspond bien à la cardinalité binaire de `Flow`, mais ne porte pas nativement de notion de type de payload (à ajouter) ; `InformationFlow`/`InformationItem` sont plus riches mais leur cardinalité exacte (source/cible multiples ?) reste à vérifier avant de trancher lequel des deux mapper.
+
+**Question à trancher** : vérifier précisément la cardinalité de `InformationFlow.getInformationSource()`/`getInformationTarget()` (singulier ou liste ?) avant de choisir entre `DataFlow` (simple, binaire, sans payload typé) et `InformationFlow` (plus riche, réalisation par des liens de bas niveau) comme cible pour `Flow`/`FlowUsage`.
 
 ---
 
@@ -177,6 +236,26 @@ Juan proposait initialement de **contribuer à SemGen** pour qu'il applique auto
 **Rebondissement 🆕** : suite aux réserves de Cédric précisées en 3.1 (performance, mémoire, cohérence), **Juan** (qui avait déjà proposé cette piste initialement, cf. historique ci-dessus) y revient en clôture d'échange, en ouverture de la discussion prévue le lendemain : *« ceci dit, en ouvre-bouche, je crois qu'il faudra bien modifier le générateur SemGen pour gérer ces cas d'héritage multiple. »* La piste n'est donc plus caduque — elle redevient une option à examiner sérieusement, potentiellement pour répondre directement aux réserves de performance/cohérence de Cédric plutôt que de les traiter uniquement via des règles d'audit compensatoires (cf. 4.6).
 
 **Question à trancher** : programme-t-on une évolution de SemGen pour traiter nativement l'héritage multiple (bénéfice : répond aux réserves de Cédric à la racine, futurs métamodèles), ou maintient-on le patron d'association composée actuel en le compensant par des règles d'audit de cohérence (4.6) ? Point à trancher lors du point d'avancement dédié à ce sujet (Juan et Cédric).
+
+### 3.2bis Pistes de solution aux réserves de Cédric — le problème est plus petit qu'il n'y paraît 🆕
+
+**Vérification faite sur le modèle live** : parmi les 20 classes secondaires distinctes des 34 cas, **seules 3 portent un attribut réellement stocké** (`Relationship.isImplied`, `Function.isModelLevelEvaluable`, `Expression.isModelLevelEvaluable` — trois simples booléens). **Les 17 autres classes secondaires n'ont strictement aucun attribut stocké** (`Classifier`, `Structure`, `Step`, `Association`, `AnnotatingElement`, `Succession`, `Behavior`, `DataType`, `BindingConnector`, `AssociationStructure`, `ConnectorAsUsage`, `Predicate`, `BooleanExpression`, `Connector`, `Flow`, `Metaclass`, `MetadataFeature`) — leur contenu réel, quand il existe, n'est que du calcul (opérations), pas de l'état persisté.
+
+**Conséquence directe** : la « multiplication du nombre d'éléments de modèle » redoutée par Cédric ne concerne réellement qu'une quinzaine de cas sur 34, pas la totalité — la majorité des associations composées actuelles n'ont **aucune charge utile** à porter.
+
+**Solutions concrètes, par catégorie de cas** :
+
+| Catégorie | Cas concernés | Solution | Coût résiduel |
+|---|---|---|---|
+| Secondaire à un seul booléen | #3 (`Connector`→`Relationship`), #13 (`CalculationDefinition`→`Function`), #14 (`CalculationUsage`→`Expression`) | **Aplatir l'attribut directement sur la classe primaire** (`Semantic` attribute natif) — supprime l'objet composé entièrement | Zéro |
+| Marqueur pur (0 attribut stocké) | Les 17 cas listés ci-dessus | **Accesseurs manuels** (déjà prévus en Partie 4.6) qui implémentent l'interface secondaire par délégation à l'état de la classe primaire, sans instance séparée — ou un **singleton/flyweight partagé** unique par métaclasse si un objet est requis pour une convention d'accès | Zéro à négligeable |
+| Secondaire = vrai objet métier riche (ex. `StateUsage` cas #20) | Cas résiduels (~14) | **Instanciation paresseuse** : ne créer l'objet composé qu'au premier accès réel (`getDataType()`…), pas systématiquement à la création de l'élément primaire | Réel, mais différé et non systématique |
+| Cohérence primaire/composé | Cas résiduels avec objet réel | **Règles d'audit bloquantes/synchrones** — déjà sur la propre checklist de Cédric (Partie 4.6, `AnalystCheckerFactory`), pas une nouvelle idée à développer, juste à appliquer à ces cas |
+| Visibilité développeur | Tous | **Méthodes par défaut sur l'interface `mm.api`** — façade qui masque la composition, cohérent avec la « API de façade » évoquée par Cédric lui-même |
+
+**Argument de contexte à faire valoir en réunion** : le précédent `ClassAssociation` (Partie 2.6) montre que Modelio paie déjà ce type de coût de duplication en production depuis 15 ans (`ClassPart` + `AssociationPart`) sans que ce soit un problème bloquant connu — élément de réassurance sur les cas résiduels qui ne peuvent pas être optimisés.
+
+**Question à trancher** : valide-t-on cette classification par catégorie (aplatir/marqueur pur/paresseux) comme plan d'action concret, plutôt que de traiter les 34 cas de façon uniforme avec le seul patron d'association composée systématique ?
 
 ### 3.3 Les 34 résolutions individuelles
 
@@ -363,9 +442,14 @@ Cf. Partie 3.3 — généraliser la pratique à **tous** les concepts couverts p
 | 7 | Alias `Dependency`, décomposition n-aire → binaire(s) | 2.2 | Normale |
 | 8 | `PropertyTable` (pas TaggedValue) pour `MetadataDefinition/Usage` | 2.3 | Critique |
 | 9 | Vue IHM dédiée « Metadata » pour ne pas perdre l'utilisateur | 2.3 | Normale |
-| 10 | Pas de 4ᵉ chevauchement à traiter | 2.4 | Normale |
+| 10 | Pas de 4ᵉ chevauchement à traiter dans `infrastructure` (mais 4 de plus trouvés hors périmètre) | 2.4 | Normale |
+| 10b | Confirmer le rattachement des comportements entrée/sortie/activité sur `State` avant de valider le mapping | 2.5 | Normale |
+| 10c | Remplacer l'association composée `AssociationStructure`/`Structure` par un alias direct `ClassAssociation` | 2.6 | Normale |
+| 10d | Valider `UseCase`/`UseCaseDependency` comme socle de `UseCaseDefinition`/`UseCaseUsage` | 2.7 | Normale |
+| 10e | Vérifier la cardinalité de `InformationFlow` avant de choisir entre `DataFlow` et `InformationFlow` pour `Flow` | 2.8 | Normale |
 | 11 | Patron d'association composée pour héritage multiple, face aux réserves de Cédric (performance/mémoire/cohérence) | 3.1 | Critique |
 | 12 | Réévaluer l'évolution de SemGen pour l'héritage multiple (piste rouverte) vs compenser par des règles d'audit | 3.2 | Critique |
+| 12b | Adopter la classification par catégorie (aplatir/marqueur pur/paresseux) plutôt que le patron uniforme | 3.2bis | Critique |
 | 13 | Revue cas par cas des 34 résolutions (avec exemples) | 3.3 | Normale |
 | 14 | Structure finale du livrable (spec seule ou + exigences Modelio) | 5.1 | Normale |
 | 15 | Canal de communication avec l'équipe parsing | 5.2 | Critique |
