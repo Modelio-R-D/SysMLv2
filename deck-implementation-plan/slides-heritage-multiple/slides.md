@@ -180,6 +180,25 @@ Si ce Java-là était généré : <strong>zéro</strong> des 4 problèmes préc�
 
 ---
 
+<!-- _class: dense -->
+
+# Confirmé dans le code source : c'est codé en dur, pas une limite de config
+
+Même patron dupliqué dans 7 générateurs — un seul appel à `createGeneralization`, jamais de boucle au-delà du premier parent :
+
+| Générateur | Émet |
+|---|---|
+| `ApiGenerator`, `MonogeApiGenerator` | L'interface `mm.api` — **celui qui compte** : Java autorise `extends` multiple ici |
+| `MetaclassGenerator`, `MetaclassLoadGenerator` | Descripteur / chargeur de métaclasse |
+| `DataGenerator`, `MonogeDataGenerator` | La classe `XData` |
+| `ImplGenerator` | `XImpl` — ici la limite Java (une classe mère) est réelle, pas un choix du générateur |
+
+<div class="box p">Aucune échappatoire : <code>IAnnotationScheme</code> a des points d'extension (<code>isAllowedLinkFlow</code>...) mais <code>doGenerateInheritance</code> ne les consulte jamais.</div>
+
+<div class="takeaway">Un vrai correctif : 6 générateurs à faire boucler sur tous les parents, plus une décision de conception pour <code>XImpl</code> (composition cachée ou façade déléguante). Périmètre connu, pas à explorer — à cadrer avec Cédric.</div>
+
+---
+
 # Un problème déjà connu, il y a 15 ans
 
 <div class="box p">
@@ -187,7 +206,7 @@ L'implémentation UML2 de Modelio a buté sur exactement ce mur — bricolée à
 </div>
 
 <div class="box m">
-SysML v2 (via KerML, qui reprend des schémas de UML2) réintroduit le même besoin. Un concurrent (outil Dassault) revendique une conformité à 100% à la norme.
+SysML v2 (via KerML, qui reprend des schémas de UML2) réintroduit le même besoin. Cédric note qu'un concurrent (un outil Dassault, selon son souvenir) revendiquerait une conformité à 100% à la norme — non vérifié de notre côté.
 </div>
 
 <div class="takeaway">Régler « à la source » = faire évoluer le générateur SemGen/JavaDesigner lui-même, pas continuer à contourner modèle par modèle.</div>
@@ -200,7 +219,7 @@ SysML v2 (via KerML, qui reprend des schémas de UML2) réintroduit le même bes
 <div>
 
 **Hors de portée ici**
-Modifier le générateur SemGen/JavaDesigner (code propriétaire Modelio) — chantier outillage, pas ce projet de transformation.
+Modifier le générateur SemGen/JavaDesigner — périmètre maintenant connu (6 générateurs + 1 décision de conception), mais reste un chantier de code source partagé à cadrer avec l'équipe outillage, pas ce projet de transformation.
 
 </div>
 <div>
@@ -219,7 +238,7 @@ Délégation écrite à la main pour les 8 cas avec du contenu réel (procédure
 
 1. **Court terme** — garder l'association composée, documentée explicitement comme contournement temporaire, pas comme solution conforme.
 2. **Moyen terme** — délégation manuelle pour les 8 cas à contenu réel, si l'usage le justifie.
-3. **Le vrai sujet, niveau outillage** — faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation.
+3. **Le vrai sujet, niveau outillage** — faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation. Périmètre du correctif confirmé en source : pas une exploration à refaire.
 
 <div class="takeaway">Le point 3 est la seule option qui règle les 4 réserves de Cédric en même temps — et qui rapproche Modelio d'une vraie conformité à la norme.</div>
 

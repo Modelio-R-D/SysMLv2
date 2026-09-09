@@ -129,13 +129,28 @@ Si ce Java-là était généré, **il n'y aurait aucun des 4 problèmes du §4**
 
 **Or on a la preuve que ce n'est pas ce que fait SemGen aujourd'hui** : dans le test `TestChild` (§2), même l'**interface générée** n'a gardé qu'un seul parent — alors que Java aurait accepté les deux (`extends TestPrimary, TestSecondary` sur l'interface est valide, même si `TestChildImpl` ne peut `extends` qu'une seule classe). Le générateur de SemGen collabore visiblement sur un modèle à héritage simple partout, y compris là où Java ne l'impose pas.
 
+**Confirmé depuis, directement dans le code source de SemGen** (`H:\modelio\work\eclipse\modules\SemGen\...\semgenerator\`, investigation menée en parallèle sur une session distincte ayant accès au dépôt) : ce n'est pas une limite de configuration qu'on n'aurait pas su activer, c'est **codé en dur**. Le même patron — `final Generalization g = mmClass.getParent().isEmpty() ? null : mmClass.getParent().get(0);` puis un seul appel à `createGeneralization(...)` — est dupliqué dans sept générateurs, sans jamais boucler au-delà de l'index 0 :
+
+| Générateur | Fichier | Ce qu'il émet |
+|---|---|---|
+| `ApiGenerator` | `base/apigen/ApiGenerator.java:154` | L'interface `mm.api` (`interface X extends Parent`) — **celui qui compte le plus** : Java autorise `extends` multiple sur une interface, mais cette méthode ne le fait jamais |
+| `MonogeApiGenerator` | `monoge/apigen/MonogeApiGenerator.java:52` | Variante Monoge de l'interface `mm.api` |
+| `ImplGenerator` | `base/impgen/ImplGenerator.java:191` | La classe concrète `XImpl` — ici la limite est réellement celle de Java (une classe, un seul `extends`), pas un choix du générateur |
+| `MetaclassGenerator` | `base/mcgen/MetaclassGenerator.java:197` | Le descripteur de métaclasse (`mc`) |
+| `MetaclassLoadGenerator` | `base/mcgen/MetaclassLoadGenerator.java:60` | Le chargeur de métaclasse |
+| `DataGenerator` / `MonogeDataGenerator` | `base/datagen/DataGenerator.java:209`, `monoge/datagen/MonogeDataGenerator.java:40` | La classe `XData` |
+
+Aucune échappatoire trouvée non plus : `GeneratorConfig.java` ne porte que l'id/nom/version/provider du métamodèle, rien sur une stratégie d'héritage ; `IAnnotationScheme.java` expose bien des points d'extension (`isAllowedLinkFlow`, `isAllowedDependencyFlow` — les mécanismes `SemGenAllowedDependency`/`SemGenAllowedLink` déjà testés négativement en §2), mais `doGenerateInheritance` ne consulte jamais ce schéma d'annotation — il lit directement `mmClass.getParent()`. Ce n'est donc pas un point d'extension qu'on invoquerait mal ; il n'existe pas.
+
+**Conséquence concrète pour un vrai correctif** : il faudrait modifier les six points d'appel non-`Impl` (api, monoge-api, metaclass, metaclass-load, data, monoge-data) pour boucler sur `mmClass.getParent()` et émettre plusieurs `Generalization`, **plus** une décision de conception pour `ImplGenerator`/`XImpl` sur la façon dont une seule classe concrète implémente deux interfaces qui déclarent chacune leur propre état/comportement (composition interne cachée dans le `XImpl` généré, ou façade déléguante) — la limite Java à une seule classe mère reste réelle à ce niveau précis, ce n'est pas, elle, un choix arbitraire du générateur.
+
 **C'est précisément le point de Cédric** : ce n'est pas la première fois — l'implémentation UML2 de Modelio, il y a 15 ans, a buté sur le même mur et a été bricolée pour cette même raison. SysML v2 (via KerML, qui reprend des schémas de UML2) réintroduit le même besoin. Régler ça « à la source » veut dire : faire évoluer le générateur SemGen/JavaDesigner lui-même pour qu'il produise une interface à héritage multiple + une seule classe d'implémentation, plutôt que de continuer à contourner le problème modèle par modèle.
 
 ---
 
 ## 6. Ce qui est réellement en notre pouvoir, et ce qui ne l'est pas
 
-- **Hors de portée depuis ce projet de transformation** : modifier le générateur SemGen/JavaDesigner lui-même (code propriétaire Modelio, pas accessible via le scripting Jython contre le modèle). C'est un chantier pour l'équipe outillage.
+- **Hors de portée depuis ce projet de transformation** : modifier le générateur SemGen/JavaDesigner lui-même. Le périmètre exact est maintenant connu (§5) — six points d'appel à faire boucler sur tous les parents, plus une décision de conception pour `ImplGenerator`/`XImpl` — mais reste un chantier de code source partagé, pas quelque chose qu'on modifie via le scripting Jython contre le modèle. C'est un chantier pour l'équipe outillage, à cadrer avec Cédric avant toute modification (aucun correctif n'a été tenté ni proposé à ce stade — la source n'a été que lue).
 - **Dans notre pouvoir, si on veut limiter la casse en attendant** : ré-introduire une couche de délégation écrite à la main (`implements Secondary` + méthodes qui délèguent vers l'objet composé) — mais seulement pour les 8 cas avec du contenu réel (§4.4), pas les 32. Cette procédure est déjà validée et documentée (bascule de stéréotype `Semantic` → `SemGenManual`, écriture manuelle, `reverse` JavaDesigner pour la traçabilité) — voir `points-a-trancher.md`. Elle règle la perte de contenu direct (§4.4) mais pas la perte de classification (§4.5), ni la duplication d'objets à l'exécution (§4.1–4.3).
 
 ## 7. Recommandation
@@ -144,4 +159,4 @@ Poser clairement la question comme un choix d'équipe, pas une décision déjà 
 
 1. **Court terme** : garder l'association composée (déjà validée, génère proprement), documentée explicitement comme un contournement temporaire — pas une solution conforme à la norme.
 2. **Moyen terme, si le contenu perdu (8 cas) pose un vrai problème d'usage** : ajouter la délégation manuelle pour ces 8 cas précisément.
-3. **Le vrai sujet, à porter au niveau outillage (pas ce projet)** : faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation — la seule option qui règle vraiment les 4 points de Cédric en même temps, et qui rapprocherait Modelio d'une conformité réelle à la norme (argument concurrentiel inclus).
+3. **Le vrai sujet, à porter au niveau outillage (pas ce projet)** : faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation — la seule option qui règle vraiment les 4 points de Cédric en même temps, et qui rapprocherait Modelio d'une conformité réelle à la norme. Périmètre du correctif maintenant confirmé au niveau code source (§5) : six générateurs à faire boucler sur tous les parents, plus une décision de conception restant à trancher pour `XImpl` — pas une exploration à refaire, un chantier à cadrer.
