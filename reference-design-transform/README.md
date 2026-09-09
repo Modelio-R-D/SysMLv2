@@ -58,9 +58,18 @@ pipeline — API findings from them are already folded into
 
 ## Known gaps (don't block generation — see `points-a-trancher.md`)
 
-- Attribute type-constraint tag (`PropertyType`) / `Value` defaults not set —
-  confirmed to cause real `ERROR Attribute X has no initial value` messages
-  in KerML generation, not just cosmetic; no mechanism found yet.
+- Attribute `Value` defaults not set — causes a real `ERROR Attribute X has
+  no initial value` line per attribute during generation (~30 across
+  KerML+SysML, mostly booleans). **Deliberately left unset, not a gap to
+  close**: verified directly against both `kerml.txt` and `sysml.txt` that
+  the OMG spec text itself never assigns a default to any of these
+  attributes (bare `attrName : Type` declarations throughout, no `= value`
+  anywhere), and neither mature reference metamodel we have access to
+  (`analyst`, `archimate`) sets a default on a single boolean attribute
+  either (checked directly: 2 non-boolean defaults total across both, out
+  of thousands of attributes). Fabricating `true`/`false` here would assert
+  something the spec deliberately leaves open. The `ERROR` in the log is
+  non-fatal - generation completes regardless.
 - Association-end properties `structural.isToDelete`,
   `persistency.optional`, `Semantic.link.source`/`target` not set (the
   composed-Association secondary-axis ends already get `aggregation`/
@@ -68,3 +77,12 @@ pipeline — API findings from them are already folded into
   are the doc's lower-priority ones).
 - Whether SemGen/JavaDesigner/reverse generation itself is scriptable from
   Jython (vs. GUI menu only) is untested.
+- The composed-Association secondary axis itself (Phase 3 above) is a
+  workaround, not a conformant fix — SemGen collapses to single inheritance
+  even at the Java interface level, where Java itself would allow multiple
+  `extends`. Real cost (object duplication, no cross-object consistency
+  check, 14 attributes/operations only reachable via an extra accessor hop
+  on 8 of the 32 cases, classification itself lost on all 32) is quantified
+  in `deck-implementation-plan/limitation-heritage-multiple-semgen.md` — not
+  something this transformation can fix from the model side; it would need
+  a SemGen/JavaDesigner generator change.
