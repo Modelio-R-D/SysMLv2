@@ -2,7 +2,7 @@
 
 Document de synthèse unifiant les **points à trancher** (`points-a-trancher.md`) et les **points issus de la réunion du 27 août 2026** (Antonin, Cédric, Juan, Bilal, Fadwa, Laurent) qui n'y figuraient pas encore. Objectif : disposer d'un document de spec unique, structuré par thème, servant de base d'arbitrage et de référence pour l'implémentation.
 
-> **Convention de lecture** : chaque section reprend d'abord la proposition/le constat, puis la question à trancher. Les apports issus de la réunion (non présents dans le document original) sont signalés par le tag **🆕 Réunion 27/08**.
+> **Convention de lecture** : chaque section reprend d'abord la proposition/le constat, puis la question à trancher. Les apports issus de la réunion (non présents dans le document original) sont signalés par le tag **🆕 Réunion 27/08**. Les apports de la **réunion du 09/09/2026** (Antonin, Cédric, Juan, Bilal, Fadwa) et du suivi de commits associé sont signalés par le tag **🆕 Réunion 09/09**.
 
 ---
 
@@ -237,6 +237,18 @@ Juan proposait initialement de **contribuer à SemGen** pour qu'il applique auto
 
 **Question à trancher** : programme-t-on une évolution de SemGen pour traiter nativement l'héritage multiple (bénéfice : répond aux réserves de Cédric à la racine, futurs métamodèles), ou maintient-on le patron d'association composée actuel en le compensant par des règles d'audit de cohérence (4.6) ? Point à trancher lors du point d'avancement dédié à ce sujet (Juan et Cédric).
 
+**Mise à jour 🆕 Réunion 09/09 — décision prise : on part sur le correctif SemGen, avec une limite majeure révélée par Cédric.**
+
+Le point d'avancement dédié annoncé ci-dessus a eu lieu le 09/09. Juan y a rejoué en direct l'exemple `TestChild`/`TestPrimary`/`TestSecondary` (cf. `limitation-heritage-multiple-semgen.md` §2) : SemGen aujourd'hui ne génère qu'une seule généralisation, y compris sur l'interface `mm.api` où Java aurait pourtant accepté un `extends` multiple. Antonin a demandé confirmation à Cédric : *« Est-ce que 2 interfaces comme ça règle le problème pour toi ? »* — Cédric : *« Oui. »*
+
+**Mais Cédric introduit une limite plus profonde que le seul générateur SemGen** : même une fois l'interface `mm.api` corrigée pour porter un vrai héritage multiple, ça suppose des **modifications du noyau Modelio** (les classes de métamodèle interne `MClass`/`SmClass`), qui aujourd'hui ne portent qu'**une seule généralisation par élément** (« Pour l'instant ils ont qu'un seul [Generalization] par un, pour en avoir plusieurs [...] y a plein de trucs, y a des trucs qui vont plus compiler »). Ce changement de noyau **change le major de Modelio** — Antonin confirme : « C'est Modelio 7 [...] ça dépend si vous arrivez au bout. Si vous arrivez au bout, oui — mais l'objectif c'est ça, on va vous aider. »
+
+**Deux chantiers désormais distincts, à ne pas confondre** :
+1. **Correctif SemGen (couche génération de code)** — déjà engagé et prototypé les 09-10/09 (Cédric a transmis le code source, cf. `d981cf0`) : `ApiGenerator` boucle désormais sur tous les parents pour générer l'interface `mm.api` à héritage multiple réel, et un nouvel utilitaire `ModelUtils` aplatit les membres du 2ᵉ (ou 3ᵉ) parent directement sur la classe `Impl` feuille plutôt que de générer une délégation — 9 points d'appel modifiés dans 7 fichiers, build Maven/JDK21 réussi (`SemGen_4.0.00.jmdac`). Détail technique complet : [semgen-patch-heritage-multiple.md](semgen-patch-heritage-multiple.md) ; suivi de décision : [limitation-heritage-multiple-semgen.md](limitation-heritage-multiple-semgen.md). **Non encore validé en régénération réelle** — prochaine étape : lancer `Generate Metamodel` sur le métamodèle de test `SemGenMultiParentProbe` (stéréotypé le 2026-09-10) dans un projet local séparé (`UML-BPMN`, hors du fragment SysML2 partagé de `modelio.all` — exigence explicite d'Antonin), avec `FlowUsage` (cas #22, 3 parents) comme cas de test réel une fois validé sur le probe.
+2. **Support natif multi-parent au niveau du noyau Modelio** — ce que Cédric vise à terme pour que la substituabilité polymorphique soit réelle (pas seulement l'aplatissement de membres). Non chiffré, non planifié, positionné comme un chantier **Modelio 7** (changement de version majeure), donc hors du périmètre temporel de ce projet SysML v2. Reste à clarifier si le correctif SemGen (point 1) suffit en pratique pour ce projet sans ce chantier de noyau, ou si des limitations subsisteront (ex. persistance `structural.node` d'une classe qui serait 2ᵉ parent, point resté ouvert dans `limitation-heritage-multiple-semgen.md` §Statut/point 7).
+
+**Question à trancher (mise à jour)** : le correctif SemGen (point 1), une fois validé en régénération réelle sur les 34 cas, est-il suffisant pour ce projet, ou certains cas (ex. `FlowUsage`, 3 parents) exposent-ils des limites qui ne se résoudront vraiment qu'avec le chantier noyau Modelio 7 (point 2) ? Qui porte la décision de lancer ou non ce chantier noyau, et sur quel horizon ?
+
 ### 3.2bis Pistes de solution aux réserves de Cédric — le problème est plus petit qu'il n'y paraît 🆕
 
 **Vérification faite sur le modèle live** : parmi les 20 classes secondaires distinctes des 34 cas, **seules 3 portent un attribut réellement stocké** (`Relationship.isImplied`, `Function.isModelLevelEvaluable`, `Expression.isModelLevelEvaluable` — trois simples booléens). **Les 17 autres classes secondaires n'ont strictement aucun attribut stocké** (`Classifier`, `Structure`, `Step`, `Association`, `AnnotatingElement`, `Succession`, `Behavior`, `DataType`, `BindingConnector`, `AssociationStructure`, `ConnectorAsUsage`, `Predicate`, `BooleanExpression`, `Connector`, `Flow`, `Metaclass`, `MetadataFeature`) — leur contenu réel, quand il existe, n'est que du calcul (opérations), pas de l'état persisté.
@@ -256,6 +268,8 @@ Juan proposait initialement de **contribuer à SemGen** pour qu'il applique auto
 **Argument de contexte à faire valoir en réunion** : le précédent `ClassAssociation` (Partie 2.6) montre que Modelio paie déjà ce type de coût de duplication en production depuis 15 ans (`ClassPart` + `AssociationPart`) sans que ce soit un problème bloquant connu — élément de réassurance sur les cas résiduels qui ne peuvent pas être optimisés.
 
 **Question à trancher** : valide-t-on cette classification par catégorie (aplatir/marqueur pur/paresseux) comme plan d'action concret, plutôt que de traiter les 34 cas de façon uniforme avec le seul patron d'association composée systématique ?
+
+**Convergence 🆕 Réunion 09/09** : le correctif SemGen prototypé (cf. 3.2) implémente de fait une forme de la stratégie « aplatir » ci-dessus, mais généralisée à **tous** les membres du/des parent(s) secondaire(s) (attributs et associations, pas seulement les 3 cas à un seul booléen) plutôt que réservée aux seuls marqueurs sans contenu — l'aplatissement se fait désormais au niveau du générateur lui-même (`ModelUtils.getFlattenedOwnedAttributes`/`getFlattenedOwnedEnds`), pas au cas par cas dans `reference/design`. Reste ouvert : la classification par catégorie de cette section garde son intérêt pour décider **où** le composé (association composée) est encore nécessaire une fois l'aplatissement des membres généralisé — la perte de classification/polymorphisme (§4.5 de `limitation-heritage-multiple-semgen.md`) n'est en revanche pas résolue par l'aplatissement, seul le contenu (attributs/opérations) l'est.
 
 ### 3.3 Les 34 résolutions individuelles
 
@@ -427,6 +441,48 @@ Demande explicite de Bilal en clôture de réunion : documenter **chaque décisi
 
 Cf. Partie 3.3 — généraliser la pratique à **tous** les concepts couverts par le document (pas seulement les 34 cas d'héritage), pour faciliter la revue et la validation par des non-experts du domaine SysML/ingénierie système.
 
+### 5.5 Répartition des chantiers et infrastructure des plugins 🆕 Réunion 09/09
+
+Antonin découpe le travail en deux chantiers parallèles, en plus du correctif SemGen déjà couvert en 3.2 :
+
+- **Juan** continue sur le correctif SemGen (3.2) et contacte Christophe pour l'accès au projet de développement du module SMGen.
+- **Fadwa** (avec l'appui de Juan) met en place les **plugins Eclipse** nécessaires à l'implémentation du métamodèle, sur le modèle du module **Archimate** pris comme référence (« il y a aucune doc [...] la méthode c'est de regarder ce qui est fait pour Archimède »).
+
+Plugins à créer (implémentation vide au départ, l'implémentation réelle sera générée par SemGen une fois disponible) :
+
+| Plugin | Rôle |
+|---|---|
+| Metamodel API | Interfaces `mm.api` générées par SemGen |
+| Metamodel IMPL | Classes d'implémentation `mm.impl` générées par SemGen |
+| Metamodel UI | Contributions au browser Modelio (entrées, ordre de parcours, commandes) |
+| Diagram | Implémentation des diagrammes SysML v2 — prévu comme le plus gros lot de travail |
+| Contribution | Points d'extension/bouchons pour les contributions externes (« la plupart des cas, c'est des bouchons qui font pas grand-chose ») |
+
+**Convention de nommage** : `org.modelio.<domaine>.sysml2[.diagram|.metamodel.api|...]` (Antonin : « c'est du `.org` [...] ça pourra changer derrière »). Une **feature** (SFP, au sens Eclipse/RCP) rassemble ces plugins pour les intégrer à Modelio ; test recommandé : inclure la feature dans un packaging Modelio et lancer en debug, même avec une implémentation vide, pour valider que Modelio démarre avec les plugins chargés.
+
+### 5.6 Workflow Git et accès module SMGen 🆕 Réunion 09/09
+
+- **Branche de développement** : Antonin crée une branche `feature/SysML2` à partir de la branche Modelio `6.2` — tous les commits de l'équipe SysML v2 (plugins + métamodèle) s'y font exclusivement.
+- **Cas particulier du module SMGen** : pas de branche séparée pour ce module — Antonin tranche pour un **tag**, posé par Christophe avant de donner l'accès en écriture à Juan, plutôt qu'une branche : « on ne va pas maintenir 2 versions de SemGen en parallèle [...] il nous faut qu'une version qui supporte les 2 [métamodèles mono- et multi-parent], qui gère les 2. » Le tag sert de filet de sécurité (retour arrière possible) sans fragmenter durablement le développement du module.
+- **Méthode de travail sur le module SMGen** : projet de développement de module Modelio standard — générer le module une première fois, puis utiliser la commande Modelio de synchronisation des ressources SVN pour récupérer le contenu réel dans l'espace de travail.
+- **Méthode de test recommandée par Antonin** : développer et valider d'abord dans un **projet Modelio local**, avec un petit bout de métamodèle propre à chaque testeur — jamais directement contre la base de développement partagée ou le fragment SysML2 de `modelio.all`. Une fois la génération validée en local, le module patché est déployé dans `modelio.all` pour tester sur le cas réel (cf. déjà appliqué dans les faits pour le correctif SemGen, projet de test `UML-BPMN`, cf. 3.2).
+
+### 5.7 Chantier parallèle — prototype d'éditeur textuel synchronisé (Bilal) 🆕 Réunion 09/09
+
+Bilal avance en parallèle sur la synchronisation bidirectionnelle éditeur textuel ↔ modèle graphique, sans attendre la finalisation du métamodèle SysML v2 :
+
+- **Constat de marché** (revue de 4-5 ateliers de modélisation dont MagicDraw) : aucun ne supporte une vraie synchronisation continue à double sens — soit un import/export différé avec écrasement silencieux, soit l'éditeur textuel qui fait autorité et les diagrammes ne sont que générés.
+- **Piste retenue** : s'appuyer sur l'implémentation par défaut **Xtext** de l'EMF (« vraiment pas mal ») plutôt que repartir de zéro, pour bénéficier nativement de l'auto-complétion, de la vue Problèmes, etc.
+- **Risque technique identifié par Cédric** : les éditeurs Eclipse basés sur Xtext (et les éditeurs de diagrammes web Eclipse) reposent en interne sur un modèle **EMF** — y compris pour les éditeurs XMI. Une couche d'adaptation (AST) entre ce modèle EMF et le framework **MObject/MCore** de Modelio sera probablement nécessaire ; non garantie de fonctionner, mais poserait au moins les limites et contraintes réelles.
+- **Décision** : Bilal prototype d'abord avec des **éléments UML génériques** (pseudo-langage), pas directement avec SysML v2, pour obtenir rapidement un résultat concret à démontrer — « une petite étude de faisabilité ».
+- **Recommandation d'Antonin** : travailler sur la distribution **toolkit** (propriétaire) de Modelio plutôt que l'open source pur, pour disposer d'un environnement de debug complet dès le départ (la configuration Eclipse pour l'open source n'est probablement plus à jour) — même retour d'expérience que sur Tosca Designer par le passé (Juan/Amina) : toujours développer comme si c'était propriétaire, livrer une release open source seulement une fois prêt.
+
+**Question à trancher** : ce prototype (hors périmètre du métamodèle SysML v2 lui-même) doit-il être suivi/synchronisé avec l'avancement du métamodèle (2.x, 3.x) pour éviter une divergence de noms/concepts, cf. Partie 0 et 5.2 ?
+
+### 5.8 Lien avec le CIR 🆕 Réunion 09/09
+
+Antonin propose à Bilal d'inclure ces travaux sur le support des métamodèles en graphe dans le CIR (crédit impôt recherche) si pertinent. Bilal attend d'avoir un résultat plus concret avant de se prononcer sur ce qui pourra être valorisé.
+
 ---
 
 ## Synthèse des questions à trancher
@@ -453,7 +509,9 @@ Cf. Partie 3.3 — généraliser la pratique à **tous** les concepts couverts p
 | 13 | Revue cas par cas des 34 résolutions (avec exemples) | 3.3 | Normale |
 | 14 | Structure finale du livrable (spec seule ou + exigences Modelio) | 5.1 | Normale |
 | 15 | Canal de communication avec l'équipe parsing | 5.2 | Critique |
+| 16 | Correctif SemGen (interface + aplatissement) suffisant seul, ou chantier noyau Modelio 7 nécessaire pour une vraie substituabilité polymorphique | 3.2 | Critique |
+| 17 | Suivi du prototype d'éditeur textuel de Bilal en parallèle de l'avancement du métamodèle, pour éviter une divergence de noms/concepts | 5.7 | Normale |
 
 ---
 
-*Sources : `points-a-trancher.md` (plan d'implémentation initial) et transcription de la réunion du 27 août 2026 (39 min, participants : Juan Cadavid, Antonin Abhervé, Cédric Marin, Bilal Said, Fadwa Rekik, Laurent Gonçalves).*
+*Sources : `points-a-trancher.md` (plan d'implémentation initial), transcription de la réunion du 27 août 2026 (39 min, participants : Juan Cadavid, Antonin Abhervé, Cédric Marin, Bilal Said, Fadwa Rekik, Laurent Gonçalves), transcription de la réunion du 09 septembre 2026 (33 min, participants : Juan Cadavid, Antonin Abhervé, Cédric Marin, Bilal Said, Fadwa Rekik), et suivi de commits `juancadavid` du 09-10/09/2026 (`limitation-heritage-multiple-semgen.md`, `semgen-patch-heritage-multiple.md`).*
