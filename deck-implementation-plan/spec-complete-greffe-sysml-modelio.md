@@ -26,11 +26,11 @@ Ce principe **chapeaute toutes les décisions de mapping** (Partie 2) : dès qu'
 
 ### 1.1 Point de greffe des éléments
 
-**Proposition** : le point de greffe est `ModelElement`. `KerML::Element` est renommé, dans `implementation` uniquement, en `KerMLModelElement`, et étend directement `ModelElement` — même patron que l'implémentation UML de Modelio (`UmlModelElement extends ModelElement`).
+**État vérifié après génération** : `KerML::Element` est renommé, dans `reference/design`, en `KerMLModelElement`. L'API générée l'intègre via `ecore::EObject` et `mapi::MObject`; l'implémentation passe par `KerMLModelElementImpl` puis `SmObjectImpl`. Le résultat actuel n'étend pas directement `ModelElement`.
 
-**Bénéfice confirmé en réunion 🆕** : Antonin souligne qu'hériter de `ModelElement` donne **gratuitement** l'accès aux stéréotypes, TaggedValue et PropertyTable définis dans Modelio — aucun développement supplémentaire n'est nécessaire pour ce mécanisme dès lors que la greffe est faite au bon endroit.
+**Précision** : `ModelElement` reste un précédent de l'infrastructure UML, mais il ne doit pas être cité comme super-classe effective de KerML tant que la chaîne `EObject`/`MObject`/`SmObjectImpl` reste celle générée et validée.
 
-**Question à trancher** : valide-t-on ce renommage et ce point de greffe ?
+**Décision actuelle** : conserver la chaîne générée et documentée ci-dessus ; ne pas modifier le point de greffe pendant la restauration de l'héritage multiple.
 
 ### 1.2 Point de greffe du projet
 
@@ -197,23 +197,25 @@ ClassAssociation implements UmlModelElement {
 
 ## Partie 3 — Héritage multiple KerML → Java
 
+> **État validé 2026-09-16** — SemGen `4.0.02` / `semgenerator 1.4.02` génère KerML et SysML avec les généralisations multiples réelles conservées. Cette partie distingue désormais l'ancienne solution par association composée de la conception active.
+
 ### 3.1 Constat et stratégie générale
 
-**Constat** : 34 classes de `reference` ont deux (ou trois) super-types directs — impossible à traduire tel quel en Java.
+**Constat** : 34 classes de `reference` ont deux (ou trois) super-types directs. Java impose toujours un seul `extends` aux classes concrètes, mais les interfaces peuvent porter plusieurs parents.
 
 **Historique — deux approches essayées et abandonnées 🆕** :
 1. *Interface `mm.api` à double `extends` + délégué interne (« Behavior »)* — proposition initiale (Fowler, *Replace Inheritance with Delegation*). Abandonnée : reproduire fidèlement la hiérarchie réelle de l'axe secondaire dans chaque délégué obligeait soit à dupliquer tous les attributs/opérations hérités (classes énormes), soit à construire une hiérarchie fantôme parallèle d'une quarantaine de classes `XxxBehavior` — coût de maintenance jugé disproportionné pour un problème purement outillage.
 2. *Attribut composé typé directement par la vraie classe secondaire* (ex. `AttributeDefinition.dataType : DataType` en attribut) — plus simple sur le papier, mais **confirmé en échouant à la génération réelle SemGen + Java Architect 🆕** : un attribut `Semantic` ne peut être typé que par un type Java primitif restreint (cf. 4.2), jamais par une autre métaclasse.
 
-**Solution retenue et validée par génération réelle 🆕 — association composée vers la vraie classe secondaire** : pour chaque cas, l'axe **Definition/Usage** gagne `extends` (axe primaire) ; l'autre axe est modélisé comme une **relation d'agrégation composite** entre la classe primaire et **la vraie métaclasse secondaire elle-même** (pas de délégué synthétique) — stéréotype `Semantic` aux deux bouts, composition côté primaire. Validée d'abord sur un métamodèle jetable, puis appliquée aux 33 cas réels dans `reference/design` : génération SemGen + Java Architect propre, sans erreur. Chaque association composée porte une `Note` signalant qu'elle résulte de la résolution d'un héritage multiple et n'existe pas dans `reference/spec`.
+**Ancienne solution, désormais abandonnée** : l'axe **Definition/Usage** gagnait `extends` et l'autre axe était représenté par une association composée vers la vraie métaclasse secondaire. Cette solution reste documentée pour l'historique, mais les associations techniques doivent être retirées de `reference/design` maintenant que SemGen conserve l'héritage multiple.
 
-**Contrainte technique à l'origine de ce choix, révélée en réunion 🆕** : Cédric confirme que **SemGen rejette (bloque) toute métaclasse portant un héritage multiple réel** dans le modèle, y compris pour la seule interface `mm.api`. Il n'y a donc pas de marge : la métaclasse ne doit physiquement plus porter qu'une seule généralisation, quelle que soit la solution retenue pour représenter l'axe secondaire — l'association composée n'est pas qu'une préférence de conception, c'est la seule voie compatible avec SemGen tel qu'il existe aujourd'hui.
+**Correctif SemGen désormais validé** : SemGen `4.0.02` / `semgenerator 1.4.02` conserve tous les parents dans `mm.api`, choisit un parent concret pour `mm.impl` et aplatit les membres des parents secondaires. La contrainte précédente était une limitation de version, pas une règle du modèle.
 
-**Avantage confirmé sur les cas en cascade 🆕** : contrairement au pattern délégué (qui obligeait à chaîner des objets `Behavior` synthétiques à la main), la cascade est désormais **gratuite** — la classe secondaire réelle (ex. `Association` pour le cas 5) porte déjà sa propre association composée pour son propre cas (ex. `Classifier`), donc la navigation se fait par simple chaîne d'appels sur des objets réels (`getInteraction().getAssociation().getClassifier()`), sans rien construire de spécial pour les cas 5, 15, 16, 21, 32, 34.
+**Note historique** : les remarques sur la cascade d'associations composées décrivent l'ancien contournement et ne constituent plus une règle de conception.
 
-**Compromis assumé à documenter — perte de substituabilité polymorphique Java 🆕** : avec ce patron, une classe comme `AttributeDefinition` n'*est plus* un `DataType` au sens Java (pas d'`instanceof`, pas de passage en paramètre typé `DataType`, pas de collection `List<DataType>` qui la contiendrait implicitement) — elle *a* un `DataType`, accessible via un accesseur dédié (ex. `getDataType()`). Tout algorithme qui reposerait sur une polymorphie générique de l'axe secondaire (recherche de tous les `DataType` du modèle, vérifications de type génériques) devra explicitement passer par cet accesseur. **À vérifier avant généralisation** : existe-t-il aujourd'hui, ou dans les besoins de l'équipe parsing (Bilal, cf. 5.2), des algorithmes qui présupposent cette polymorphie ? Si oui, prévoir une convention de nommage uniforme des accesseurs pour limiter la friction.
+**Compromis de l'ancienne solution, conservé pour mémoire** : avec l'association composée, une classe comme `AttributeDefinition` n'était plus un `DataType` au sens Java. Ce compromis disparaît de la conception cible lorsque les généralisations réelles sont restaurées.
 
-**Réserves précisées par Cédric Marin (échange post-réunion) 🆕** : interrogé sur ses doutes (perte d'information ? polymorphisme perdu ?), Cédric recadre le vrai risque : *« Multiplication du nombre d'éléments de modèle qui représentent un seul élément, avec des conséquences sur : les performances, la consommation mémoire, des contrôles de cohérence supplémentaires (ne pas laisser quelqu'un créer un morceau sans l'autre, et qu'ils soient reliés entre eux), API de façade pour que ça ne se voie pas. »* Concrètement :
+**Réserves historiques sur l'ancien contournement** : la multiplication d'objets, le coût mémoire, la cohérence et la façade API concernaient l'association composée; ces risques ne s'appliquent plus à la conception active.
 - **Performance/mémoire** : chaque instance utilisateur des 34 cas crée un objet composé supplémentaire — sur un modèle système de grande taille, ce n'est pas négligeable (potentiellement des dizaines de milliers d'objets « fantômes » en plus).
 - **Cohérence** : l'objet composé pourrait être supprimé ou désynchronisé indépendamment de son primaire — nécessite des **règles d'audit dédiées** (probablement bloquantes/synchrones, cf. Partie 4.6) pour garantir que les deux existent et restent liés ensemble.
 - **Façade API** : confirme le besoin déjà identifié d'accesseurs uniformes, mais formulé plus explicitement comme une vraie couche de façade à concevoir, pas juste une convention de nommage.
@@ -222,20 +224,17 @@ ClassAssociation implements UmlModelElement {
 
 **Point de vigilance UX 🆕** : l'instance composée est un vrai élément persisté (propre identité, propre place dans l'arbre de composition). À trancher : faut-il la masquer dans les vues standard de l'explorateur de modèle Modelio pour éviter qu'un utilisateur SysML v2 final ne voie apparaître un enfant technique (ex. un `DataType` sous chaque `AttributeDefinition`) sans rapport avec son intention de modélisation — même famille de risque que la remarque de Fadwa en 2.3 sur `PropertyTable`/Metadata ?
 
-**Conséquence pratique sur le script 🆕** : le script de transformation `reference → implementation` (Partie 4) doit produire, pour chaque cas, une classe avec un seul `extends` réel (axe primaire) + une association composite vers la vraie classe secondaire (jamais un second `extends`/`implements`, jamais de classe déléguée synthétique) — stéréotype `Semantic` aux deux bouts, conformément aux conventions déjà décrites en 4.2.
+**Conséquence pratique sur le script** : le script de transformation `reference → design` doit recopier toutes les généralisations réelles de `reference/spec` et supprimer les associations composites ajoutées uniquement par l'ancien contournement. Il ne doit créer ni classe déléguée ni association technique pour représenter un parent secondaire.
 
-**Question à trancher** : 
-- Valide-t-on ce patron (association composée vers la vraie classe secondaire) comme règle par défaut pour les 34 cas ?
-- Valide-t-on une convention de nommage uniforme pour les accesseurs de la facette secondaire (ex. nommés d'après le type secondaire) ?
-- Décide-t-on de masquer ou non ces associations techniques dans les vues utilisateur standard de Modelio ?
+**Décision** : restaurer les généralisations réelles et supprimer les associations techniques de délégation. Les questions de masquage et de nommage des accesseurs composés deviennent historiques.
 
-### 3.2 Piste d'évolution outillage 🆕 (réouverte)
+### 3.2 Piste d'évolution outillage
 
-Juan proposait initialement de **contribuer à SemGen** pour qu'il applique automatiquement un pattern de délégation plutôt que de traiter les 34 cas à la main. Conclusion précédente : le patron d'association composée retenu en 3.1 fonctionne avec SemGen tel qu'il existe aujourd'hui, rendant cette piste largement caduque pour ce besoin précis.
+Le correctif SemGen a été implémenté et validé : l'interface conserve l'héritage multiple et l'implémentation aplatit les membres secondaires. La piste n'est donc plus ouverte pour ce besoin précis.
 
 **Rebondissement 🆕** : suite aux réserves de Cédric précisées en 3.1 (performance, mémoire, cohérence), **Juan** (qui avait déjà proposé cette piste initialement, cf. historique ci-dessus) y revient en clôture d'échange, en ouverture de la discussion prévue le lendemain : *« ceci dit, en ouvre-bouche, je crois qu'il faudra bien modifier le générateur SemGen pour gérer ces cas d'héritage multiple. »* La piste n'est donc plus caduque — elle redevient une option à examiner sérieusement, potentiellement pour répondre directement aux réserves de performance/cohérence de Cédric plutôt que de les traiter uniquement via des règles d'audit compensatoires (cf. 4.6).
 
-**Question à trancher** : programme-t-on une évolution de SemGen pour traiter nativement l'héritage multiple (bénéfice : répond aux réserves de Cédric à la racine, futurs métamodèles), ou maintient-on le patron d'association composée actuel en le compensant par des règles d'audit de cohérence (4.6) ? Point à trancher lors du point d'avancement dédié à ce sujet (Juan et Cédric).
+**État** : évolution SemGen réalisée. Il reste à régénérer `reference/design` sans le contournement et à valider les 34 cas sur le modèle complet.
 
 **Mise à jour 🆕 Réunion 09/09 — décision prise : on part sur le correctif SemGen, avec une limite majeure révélée par Cédric.**
 
@@ -273,7 +272,7 @@ Le point d'avancement dédié annoncé ci-dessus a eu lieu le 09/09. Juan y a re
 
 ### 3.3 Les 34 résolutions individuelles
 
-Cas 1–7 : noyau KerML. Cas 8–34 : niveau SysML. **Note de lecture 🆕** : la colonne « axe délégué » ci-dessous désigne désormais la **vraie métaclasse secondaire** vers laquelle pointe l'association composée (cf. 3.1) — il ne s'agit plus d'une interface implémentée par un objet `Behavior` synthétique, mais d'une relation d'agrégation composite vers une instance réelle de cette classe.
+**Tableau historique du contournement** : cas 1–7 : noyau KerML; cas 8–34 : niveau SysML. La colonne d'association composée décrit l'ancien `reference/design`; la cible actuelle conserve les généralisations réelles et ne crée plus ces associations techniques.
 
 | # | Classe | `extends` (axe primaire) | Association composée vers (axe secondaire) |
 |---|---|---|---|
@@ -318,7 +317,7 @@ Cas 1–7 : noyau KerML. Cas 8–34 : niveau SysML. **Note de lecture 🆕** : l
 
 **Point de méthode soulevé en réunion 🆕 (Bilal)** : pour chaque cas non trivial, documenter un **exemple métier concret** (pas seulement la définition formelle) — ex. l'exemple donné par Bilal pour `subset` : relation `équipe/joueur` où un `capitaine` est un `joueur` à un instant donné (`subset` de `capitaineship` sur `membership`). Objectif : vérifier que chaque résolution couvre bien les cas d'usage réels, pas seulement la structure XMI.
 
-**Question à trancher** : valide-t-on la règle générale et laisse-t-on les 34 cas en découler automatiquement, ou souhaite-t-on une revue cas par cas avec exemples à l'appui pour les cas contestables ?
+**Statut** : les 34 cas sont à restaurer comme généralisations réelles; la revue cas par cas devient une validation de fidélité et de génération, non un choix de délégation.
 
 ---
 
@@ -326,7 +325,7 @@ Cas 1–7 : noyau KerML. Cas 8–34 : niveau SysML. **Note de lecture 🆕** : l
 
 ### 4.1 Objectif
 
-Une fois les points 1 à 3 tranchés, un script Jython construit `implementation` automatiquement à partir de `reference`, en appliquant mécaniquement les règles décidées plutôt que de recopier les 182 classes à la main.
+Une fois les points 1 à 3 tranchés, un script Jython construit `reference/design` automatiquement à partir de `reference/spec`; `implementation` reste exclusivement le résultat produit par SemGen/JavaDesigner.
 
 ### 4.2 Stéréotypes et propriétés SemGen à appliquer
 
@@ -491,7 +490,7 @@ Antonin propose à Bilal d'inclure ces travaux sur le support des métamodèles 
 |---|---|---|---|
 | 1 | Non-conformité 100 % comme règle par défaut | Partie 0 | Critique |
 | 2 | Responsable du mapping texte ↔ modèle | Partie 0 | Critique |
-| 3 | Renommage `KerML::Element` → `KerMLModelElement extends ModelElement` | 1.1 | Normale |
+| 3 | Renommage `KerML::Element` → `KerMLModelElement`, chaîne `EObject`/`MObject`/`SmObjectImpl` | 1.1 | Normale |
 | 4 | `SysMLProject extends AbstractProject`, pas de surface KerML | 1.2 | Normale |
 | 5 | Arbitrage `Comment/Documentation/TextualRepresentation → Note` (bonne sémantique, mauvaise cardinalité) ou `Constraint` (bonne cardinalité, sémantique de restriction formelle) | 2.1 | Critique |
 | 6 | Support de `locale` dès la v1, sur le candidat retenu | 2.1 | Normale |

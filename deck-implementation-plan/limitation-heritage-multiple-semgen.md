@@ -1,6 +1,10 @@
-# Héritage multiple KerML/SysML v2 : ce que SemGen ne sait pas faire, et ce que ça coûte
+# Héritage multiple KerML/SysML v2 : limitation historique et correctif SemGen
 
 Document de travail préparé suite à la réserve de Cédric Marin sur l'approche actuelle de résolution des 34 cas d'héritage multiple. Objectif : poser le problème concrètement, avec des exemples réels tirés du modèle, avant la discussion.
+
+> **Mise à jour 2026-09-11** — Les conclusions de ce document décrivent le comportement de SemGen avant le correctif `4.0.01` / `semgenerator 1.4.01`. Le correctif a été validé par la génération KerML complète : les interfaces conservent les parents multiples et les implémentations aplatissent les membres secondaires. La cible actuelle est donc de restaurer les généralisations réelles dans `reference/design` et de supprimer les associations de délégation techniques.
+
+> **Statut actuel 2026-09-16** — KerML (81 métaclasses) et SysML (97 métaclasses) génèrent avec succès dans `modelio.sysml2::implementation`. The composed-association workaround is historical; the active model preserves real multiple generalizations.
 
 ## Statut (suivi live — patch SemGen)
 
@@ -8,10 +12,10 @@ Correctif mené hors de ce workspace, dans le dépôt SemGen lui-même (`H:\mode
 
 1. **Présenté à Cédric Marin**, qui a transmis le code source de SemGen. Recommandation §7 point 3 acceptée sur le principe.
 2. **Décision côté `Impl`, tranchée par Juan** : entre (a) aplatir les membres du 2ᵉ parent directement sur la classe `Impl` feuille, et (b) générer automatiquement la délégation vers un objet composé (l'équivalent automatisé du contournement actuel) — **(a) retenu**, seule option réglant vraiment les 4 réserves de Cédric (§4), et alignée avec le précédent EMF/Ecore déjà cité comme référence MDE.
-3. **Correctif implémenté et build réussi** : interface `mm.api` à héritage multiple réel + aplatissement du 2ᵉ parent sur la classe `Impl` feuille, dans 7 fichiers de SemGen. `SemGen_4.0.00.jmdac` compile sans erreur (Maven/JDK21). **Détail technique complet du code réel (lu directement depuis le checkout, pas rapporté) : voir `semgen-patch-heritage-multiple.md`** — ce fichier-ci reste le suivi de décision, pas la référence du code.
+3. **Correctif implémenté et validé** : interface `mm.api` à héritage multiple réel + aplatissement du 2ᵉ parent sur la classe `Impl` feuille. `SemGen_4.0.02.jmdac` compile sans erreur et les générations KerML/SysML réelles réussissent.
 4. **`FlowUsage` (cas #22, les 3 parents)** confirmé comme cas de test réel : primaire `ActionUsage`, deux parents secondaires `ConnectorAsUsage` et `Flow` — seul cas des 34 avec deux axes secondaires au lieu d'un.
 5. **Projet de test local prêt, cadré par Antonin** : le module patché est installé dans une instance Modelio séparée (projet `UML-BPMN`, hors du fragment SysML2 partagé de `modelio.all`), ScriptServer connecté dessus. Métamodèle de test `SemGenMultiParentProbe` reconstruit dedans (`TestPrimary`/`TestSecondary`/`TestChild`, `TestChild` avec ses deux vraies `Generalization` — la même configuration que le test `TestChild` original qui avait prouvé la perte silencieuse du 2ᵉ parent). Stéréotypes SemGen appliqués et vérifiés le 2026-09-10 : `Metamodel` sur le composant (tags `name`/`id`/`version`/`provider`/`providerversion`/`production.namespace`/`isExtension`), `Semantic` + `structural.node` sur les 3 classes.
-6. **Prochaine étape** : lancer `Generate Metamodel` sur `SemGenMultiParentProbeMetamodel` dans ce projet de test, et vérifier que `TestChild` conserve ses deux parents (interface **et** membres aplatis) au lieu d'en perdre un silencieusement — première validation réelle du correctif.
+6. **Validation réalisée** : le probe multi-parent et les générations KerML/SysML réelles confirment que l'API conserve les parents et que les implémentations aplatissent les membres secondaires.
 7. **Ouvert, non résolu** : l'interaction avec la persistance par classe de Modelio (`structural.node`) pour une classe qui serait le 2ᵉ parent d'un cas tout en restant une classe `Semantic` normale ailleurs — à confirmer par la régénération réelle des 34 cas (`FlowUsage` en particulier), pas testable sur ce probe à 3 classes.
 8. **Ouvert, signalé côté SemGen, à vérifier ici** : les générateurs de vérification de liens/dépendances en mode Toutatis (`base/toutatis/expert/*`) ne voient toujours que la chaîne primaire — non touchés, faute de savoir si le métamodèle `reference/design` tourne en mode Toutatis.
 
@@ -53,11 +57,11 @@ public class TestChildImpl extends TestPrimaryImpl implements TestChild { ... }
 
 Le deuxième parent est **silencieusement perdu**, aussi bien sur l'interface générée (`mm.api`) que sur la classe d'implémentation (`mm.impl`). Trois autres mécanismes testés pour contourner ça (`SemGenAllowedDependency`, `SemGenAllowedLink`, un `Realization` UML classique) : les trois négatifs aussi (voir `points-a-trancher.md`, section « Points ouverts » pour le détail complet des 4 tests).
 
-**Conclusion factuelle** : SemGen ne sait générer aucune forme d'héritage multiple, sur aucun axe, par aucun mécanisme testé.
+**Conclusion historique avant correctif** : SemGen ne savait générer aucune forme d'héritage multiple, sur aucun axe, par aucun mécanisme testé.
 
 ---
 
-## 3. La solution actuelle : association composée
+## 3. La solution historique : association composée
 
 Pour ne pas perdre l'axe secondaire, `reference/design` remplace la deuxième généralisation par une **référence composée** :
 
@@ -140,7 +144,7 @@ public class AttributeDefinitionImpl extends DefinitionImpl implements Attribute
 
 Si ce Java-là était généré, **il n'y aurait aucun des 4 problèmes du §4** : un seul objet, aucune duplication mémoire, aucun contrôle de cohérence à ajouter (une seule instance, toujours cohérente par construction), aucune façade nécessaire.
 
-**Or on a la preuve que ce n'est pas ce que fait SemGen aujourd'hui** : dans le test `TestChild` (§2), même l'**interface générée** n'a gardé qu'un seul parent — alors que Java aurait accepté les deux (`extends TestPrimary, TestSecondary` sur l'interface est valide, même si `TestChildImpl` ne peut `extends` qu'une seule classe). Le générateur de SemGen collabore visiblement sur un modèle à héritage simple partout, y compris là où Java ne l'impose pas.
+**Avant correctif, on avait la preuve** : dans le test `TestChild` (§2), même l'**interface générée** ne gardait qu'un seul parent — alors que Java aurait accepté les deux. Ce comportement est désormais corrigé pour le générateur patché.
 
 **Confirmé depuis, directement dans le code source de SemGen** (`H:\modelio\work\eclipse\modules\SemGen\...\semgenerator\`, investigation menée en parallèle sur une session distincte ayant accès au dépôt) : ce n'est pas une limite de configuration qu'on n'aurait pas su activer, c'est **codé en dur**. Le même patron — `final Generalization g = mmClass.getParent().isEmpty() ? null : mmClass.getParent().get(0);` puis un seul appel à `createGeneralization(...)` — est dupliqué dans sept générateurs, sans jamais boucler au-delà de l'index 0 :
 
@@ -170,7 +174,7 @@ Aucune échappatoire trouvée non plus : `GeneratorConfig.java` ne porte que l'i
 
 Poser clairement la question comme un choix d'équipe, pas une décision déjà prise côté transformation du modèle :
 
-1. **Court terme** : garder l'association composée (déjà validée, génère proprement), documentée explicitement comme un contournement temporaire — pas une solution conforme à la norme.
+1. **Historique** : l'association composée a été conservée uniquement pour expliquer the pre-patch workaround; it is no longer the active design.
 2. **Moyen terme, si le contenu perdu (8 cas) pose un vrai problème d'usage** : ajouter la délégation manuelle pour ces 8 cas précisément.
 3. **Le vrai sujet, à porter au niveau outillage (pas ce projet)** : faire évoluer SemGen/JavaDesigner pour générer une interface à héritage multiple + une seule implémentation — la seule option qui règle vraiment les 4 points de Cédric en même temps, et qui rapprocherait Modelio d'une conformité réelle à la norme. Périmètre du correctif confirmé au niveau code source (§5) : six générateurs à faire boucler sur tous les parents, plus une décision de conception restant à trancher pour `XImpl`.
 

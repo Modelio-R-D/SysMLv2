@@ -1,18 +1,10 @@
-"""Phase 3, final: real generalizations (single-parent classes as-is, the 32
-multi-inheritance cases keep only their primary) plus, for each case, a
-composed Association between the primary and the real secondary class (no
-synthetic delegate class - see points-a-trancher.md point 5), annotated with
-a traceability Note. An earlier version of this script used a plain composed
-Attribute instead of an Association - confirmed broken at real SemGen/
-JavaDesigner generation time (fails with "not a valid java element ... check
-<<JavaClass>> stereotype"), since every real cross-class reference in this
-model is an Association, never an Attribute. Validated on a disposable test
-metamodel before being applied here: both AssociationEnds need the Semantic
-stereotype, explicit setTarget()/setSource() (Error 28), and the end owned by
-the primary (the whole) needs aggregation=composite."""
+"""Phase 3: restore every real generalization from reference/spec.
+
+The old version kept one parent and created composed associations for
+secondary parents. That workaround is obsolete with patched SemGen and must
+not be recreated by the reusable transformation pipeline."""
 
 from org.eclipse.core.runtime import NullProgressMonitor
-from org.modelio.metamodel.uml.statik import AggregationKind
 from collections import deque
 
 factory = modelingSession.getModel()
@@ -168,88 +160,31 @@ for g in gensList:
         continue
     singleParent[subName] = sup.getName()
 
-stats = {"Generalization": 0, "ComposedAssociation": 0, "Note": 0, "cases_processed": 0, "cases_skipped_excluded": 0}
+stats = {"Generalization": 0, "already_present": 0, "skipped_excluded": 0, "skipped_missing": 0}
 
-tr = modelingSession.createTransaction("Phase 3: generalizations + composed associations for the 34 cases")
+tr = modelingSession.createTransaction("Phase 3: restore real reference generalizations")
 try:
-    # 32 multi-inheritance cases: primary generalization + composed association(s).
-    for className, caseInfo in CASES.items():
-        if className in EXCLUDED_CLASSES:
-            stats["cases_skipped_excluded"] += 1
+    for g in gensList:
+        sub = g.getSubType()
+        sup = g.getSuperType()
+        if sub is None or sup is None:
             continue
-        if className not in designByName:
-            print "  SKIP (not in design):", className
+        subName = sub.getName()
+        supName = sup.getName()
+        if subName in EXCLUDED_CLASSES or subName == ROOT_CLASS:
+            stats["skipped_excluded"] += 1
             continue
-        newClass = designByName[className]
-        primaryName = caseInfo["primary"]
-        if primaryName in designByName:
-            factory.createGeneralization(newClass, designByName[primaryName])
-            stats["Generalization"] += 1
-        else:
-            print "  WARNING: primary not found in design:", primaryName, "for", className
-
-        for secName in caseInfo["secondaries"]:
-            secCls = designByName.get(secName)
-            if secCls is None:
-                print "  WARNING: secondary class missing:", secName
-                continue
-
-            endOnPrimary = factory.createAssociationEnd()
-            endOnPrimary.setName(secName[0].lower() + secName[1:])
-            newClass.getOwnedEnd().add(endOnPrimary)
-            endOnPrimary.setMultiplicityMin("1")
-            endOnPrimary.setMultiplicityMax("1")
-            endOnPrimary.setAggregation(AggregationKind.KINDISCOMPOSITION)
-
-            endOnSecondary = factory.createAssociationEnd()
-            endOnSecondary.setName("")
-            secCls.getOwnedEnd().add(endOnSecondary)
-            endOnSecondary.setMultiplicityMin("0")
-            endOnSecondary.setMultiplicityMax("1")
-
-            endOnPrimary.setOpposite(endOnSecondary)
-            endOnSecondary.setOpposite(endOnPrimary)
-            endOnPrimary.setTarget(secCls)
-            endOnSecondary.setTarget(newClass)
-
-            newAssoc = factory.createAssociation()
-            endOnPrimary.setAssociation(newAssoc)
-            endOnSecondary.setAssociation(newAssoc)
-
-            endOnPrimary.addStereotype(moduleName, "Semantic")
-            endOnSecondary.addStereotype(moduleName, "Semantic")
-
-            stats["ComposedAssociation"] += 1
-
-            caseNum = CASE_NUMBERS.get((className, secName))
-            note = factory.createNote()
-            note.setContent(
-                "Axe secondaire (cas %s, points-a-trancher.md point 5) : cette relation "
-                "n'existe pas dans reference/spec. Ajoutee lors de la transformation "
-                "reference/design pour porter l'axe delegue %s (implements %s a la main "
-                "dans le XImpl.java genere)." % (caseNum, secName, secName)
-            )
-            note.setSubject(endOnPrimary)
-            stats["Note"] += 1
-        stats["cases_processed"] += 1
-
-    # Normal (non-case) classes: copy their single real generalization directly, skip root.
-    normal_count = 0
-    for className, newClass in designByName.items():
-        if className in CASES or className == ROOT_CLASS:
+        newSub = designByName.get(subName)
+        newSup = designByName.get(supName)
+        if newSub is None or newSup is None:
+            stats["skipped_missing"] += 1
+            print "  SKIP missing design class:", subName, "->", supName
             continue
-        if newClass.getMClass().getName() != "Class":
+        if any(existing.getSuperType() == newSup for existing in newSub.getParent()):
+            stats["already_present"] += 1
             continue
-        parentName = singleParent.get(className)
-        if parentName is None:
-            continue
-        if parentName not in designByName:
-            print "  WARNING: parent not in design:", parentName, "for", className
-            continue
-        factory.createGeneralization(newClass, designByName[parentName])
+        factory.createGeneralization(newSub, newSup)
         stats["Generalization"] += 1
-        normal_count += 1
-    print "normal single-parent generalizations created:", normal_count
 
     tr.commit()
     print "COMMITTED OK"

@@ -117,16 +117,16 @@ Juan Cadavid · 2026-08-21
 # De quoi parle ce plan
 
 <div class="box m">
-Comment brancher le métamodèle KerML/SysML v2 sur l'infrastructure native de Modelio (<code>ModelElement</code>, <code>Note</code>, <code>Dependency</code>…) pour que SemGen puisse en générer un métamodèle Java valide — sans dupliquer ce que Modelio offre déjà, et sans casser la fidélité du package <code>reference</code>.
+Comment brancher le métamodèle KerML/SysML v2 sur l'infrastructure native de Modelio (<code>EObject</code>, <code>MObject</code>, <code>Note</code>, <code>Dependency</code>…) pour que SemGen puisse en générer un métamodèle Java valide — sans dupliquer ce que Modelio offre déjà, et sans casser la fidélité du package <code>reference</code>.
 </div>
 
 **Partie 1 · SysML v2 pour un œil UML** — le vocabulaire qui change (`def`/usage, `Feature`, `item`/`part`/`attribute`, specialization/subsetting/redefinition, occurrence/succession/flow, `Requirement`), avec exemples réels
 
-**Partie 2 · Le point de greffe sur l'infrastructure Modelio** — le point de greffe est `ModelElement` ; le précédent UML de Modelio ; ce que ça change pour le nommage KerML
+**Partie 2 · Le point de greffe sur l'infrastructure Modelio** — la chaîne KerML générée passe par `EObject`/`MObject` et `SmObjectImpl` ; le précédent UML `ModelElement` est distingué ; ce que ça change pour le nommage KerML
 
 **Partie 3 · Chevauchements avec l'infrastructure Modelio** — trois cas concrets (`Comment`/`Documentation`, `Dependency`, métadonnées), exemples réels tirés de la spec OMG SysML v2, avec citations
 
-**Partie 4 · Résoudre l'héritage multiple de KerML en Java** — 34 classes concernées ; approche recommandée et ses limites ; précédent MDE (EMF/Ecore), sources à l'appui
+**Partie 4 · Héritage multiple de KerML en Java** — le correctif SemGen conserve les parents multiples dans l'API et aplatit les membres secondaires dans l'implémentation ; validation et limites restantes
 
 ---
 
@@ -475,7 +475,7 @@ SysML/KerML est structurellement bien plus proche d'UML que de tout autre métam
 **Le point de greffe**
 - Renommer, dans `implementation` uniquement, la classe `Element`
   de KerML en `KerMLModelElement`
-- Faire étendre `KerMLModelElement extends ModelElement`
+- Conserver la chaîne générée `KerMLModelElement` via `EObject`/`MObject` et `SmObjectImpl`
   directement
 
 </div>
