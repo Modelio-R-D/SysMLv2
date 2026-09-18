@@ -1,14 +1,16 @@
 # Points à trancher — greffe SysML v2/KerML sur l'infrastructure Modelio
 
+> **État actuel 2026-09-16** — Les généralisations multiples réelles sont désormais conservées dans `reference/design`. SemGen `4.0.02` / `semgenerator 1.4.02` génère avec succès KerML (81 métaclasses) et SysML (97 métaclasses) dans `modelio.sysml2::implementation`. Les sections décrivant la délégation manuelle ou les associations composées sont historiques.
+
 Document de travail préparant la demande d'Antonin : la liste des décisions sur lesquelles nous avons besoin d'un arbitrage, extraites du plan d'implémentation (`slides.md`). Chaque point renvoie à la partie du deck qui détaille le raisonnement et les exemples.
 
 ## 1. Point de greffe sur l'infrastructure
 
-**Proposition** : le point de greffe est `ModelElement`. `KerML::Element` est renommé, dans `reference/design` uniquement, en `KerMLModelElement`, et étend directement `ModelElement`.
+**État vérifié dans le modèle généré** : `KerML::Element` est renommé, dans `reference/design` uniquement, en `KerMLModelElement`. Le Java généré l'intègre via `ecore::EObject` et `mapi::MObject` côté API, puis `KerMLModelElementImpl` via `SmObjectImpl` côté implémentation. `ModelElement` n'est pas la super-classe directe du résultat actuel.
 
-**Pourquoi cette proposition** : c'est exactement le patron déjà utilisé par l'implémentation UML de Modelio (`UmlModelElement extends ModelElement`), c'est la convention établie.
+**Distinction importante** : le patron `UmlModelElement extends ModelElement` reste un précédent Modelio, mais ce n'est pas la chaîne effectivement produite pour KerML. Toute évolution vers `ModelElement` devra être décidée séparément et ne doit pas être supposée par les scripts.
 
-**Question à trancher** : valide-t-on ce renommage et ce point de greffe ?
+**Décision actuelle** : conserver la chaîne générée et documentée ci-dessus ; ne pas modifier le point de greffe pendant la restauration de l'héritage multiple.
 
 *Réf. : Partie 2, slides « Résolu : le point de greffe est ModelElement » à « Ce que ça change pour la greffe — et pour le nommage ».*
 
@@ -34,7 +36,7 @@ Document de travail préparant la demande d'Antonin : la liste des décisions su
 | `KerML::Root::Dependencies::Dependency` | `infrastructure::Dependency` | Alias direct | (1) Le `Dependency` de Modelio peut porter des comportements/stéréotypes hérités du contexte UML — à vérifier qu'aucun ne s'applique par erreur à un lien KerML. (2) Pas de support n-aire côté Modelio : KerML permet `dependency X to Y, Z;` (un client, plusieurs fournisseurs, en une seule relation) ; Modelio ne représente qu'un lien binaire — une dépendance n-aire devra être décomposée en plusieurs `Dependency` binaires (`X->Y`, `X->Z`) |
 | `SysML::Systems::Metadata::MetadataDefinition`, `SysML::Systems::Metadata::MetadataUsage` | `infrastructure::Stereotype` + `infrastructure::TaggedValue` | Mapper sur le sous-système Stereotype/TaggedValue | Le plus significatif des trois : un `MetadataUsage` s'attache à plusieurs cibles à la fois en une seule instance (`about A, B, C`). En Modelio, un `Stereotype` (définition) peut bien être appliqué à plusieurs éléments, mais **chaque application** (`ExtensionValue`) ne concerne qu'un seul élément de base |
 
-*Noms qualifiés côté KerML/SysML vérifiés dans les XMI de spec (`KerML.xmi`/`SysML.xmi`). Côté Modelio, le préfixe de package (`infrastructure::`) est confirmé mais le chemin complet reste à valider une fois ScriptServer de nouveau accessible (hors ligne au moment de la rédaction).*
+*Noms qualifiés côté KerML/SysML vérifiés dans les XMI de spec (`KerML-v1.0-20250201.xmi`/`SysML-v2.0-20250201.xmi`). Côté Modelio, le préfixe de package (`infrastructure::`) est confirmé mais le chemin complet reste à valider une fois ScriptServer de nouveau accessible (hors ligne au moment de la rédaction).*
 
 **Y a-t-il d'autres chevauchements ?** Relecture des 19 classes du package `infrastructure` (voir diagramme, Partie 2) face aux 182 classes de `reference/spec` : aucun autre chevauchement conceptuel net trouvé. Le reste du package infrastructure se répartit en (a) plomberie de support pour les 3 chevauchements ci-dessus — `NoteType`, `TagType`, `TagParameter`, `MetaclassReference` — à examiner au moment de l'implémentation mais pas des concepts KerML/SysML séparés, et (b) des concepts propres à Modelio sans équivalent KerML/SysML — `Resource`/`Document`/`AbstractResource` (pièces jointes), `ExternProcessor`/`ExternElement` (intégration outillage), `Profile` (regroupement de Stereotypes), `MethodologicalLink` (Dependency spécialisé). `AbstractProject` est déjà couvert au point 2.
 
@@ -46,11 +48,11 @@ Document de travail préparant la demande d'Antonin : la liste des décisions su
 
 ## 4. Stratégie générale pour l'héritage multiple KerML → Java
 
-**Constat** : 34 classes de `reference/spec` ont deux (ou trois) super-types directs — impossible à traduire tel quel en Java (une seule classe mère autorisée).
+**État actuel** : les 34 classes de `reference/spec` ont deux (ou trois) super-types directs. Le correctif SemGen `4.0.01` / `semgenerator 1.4.01` conserve désormais tous les parents dans les interfaces générées et aplatit les membres des parents secondaires dans l'implémentation Java. La contrainte Java reste valable pour une classe concrète (`extends` unique), mais elle ne justifie plus de déformer le métamodèle source.
 
-**Proposition** : pour chaque cas, l'axe qui appartient à la lignée **Definition/Usage** gagne toujours `extends` ; l'autre axe devient une interface `mm.api`, implémentée par délégation à un objet interne qui porte son état. Approche alignée sur un précédent MDE établi (flattening EMF/Ecore) et sur des patrons de refactoring connus (*Replace Inheritance with Delegation*, *Role Object*).
+**Décision** : conserver les généralisations UML réelles dans `reference/design`. SemGen choisit l'axe primaire pour `extends` dans `mm.impl`, expose tous les parents sur `mm.api`, puis aplatit les membres des axes secondaires dans l'implémentation. Les associations composées ajoutées uniquement pour contourner l'ancien SemGen doivent être supprimées lors de la régénération de `reference/design`.
 
-**Question à trancher** : valide-t-on ce principe général comme règle par défaut ?
+**Réserve** : cette stratégie a été validée sur le probe multi-parent et sur la génération KerML complète (81 métaclasses, `GENERATION SUCCESSFUL`). Les experts Toutatis et la persistance multi-parent restent à vérifier séparément.
 
 *Réf. : Partie 4, slides « Java n'a pas d'héritage multiple » à « Ce n'est pas une approche ad hoc ».*
 
@@ -58,7 +60,7 @@ Document de travail préparant la demande d'Antonin : la liste des décisions su
 
 ## 5. Les 34 résolutions individuelles
 
-**Proposition** : chaque cas a déjà une résolution proposée (qui gagne `extends`, qui devient interface déléguée), détaillée slide par slide avec la description du concept, son chemin qualifié, et un exemple d'usage réel. Résumé des 34 cas :
+**Trace historique** : le tableau ci-dessous conserve les axes primaire/secondaire identifiés pendant l'étude. Il ne décrit plus une transformation par délégation dans `reference/design` : les deux généralisations doivent maintenant être conservées dans le modèle source.
 
 | # | Classe | `extends` (axe primaire) | `implements` (axe délégué) |
 |---|---|---|---|
@@ -99,9 +101,11 @@ Document de travail préparant la demande d'Antonin : la liste des décisions su
 
 *Cas 1–7 : noyau KerML. Cas 8–34 : niveau SysML. Détail complet (description du concept, chemin qualifié, exemple SysML v2) : Partie 4, slides « Cas 1 » à « Cas 34 ».*
 
-### Ce que porte l'axe délégué, cas par cas
+### Ancienne résolution par association composée (historique)
 
-**Design final, validé par génération réelle (SemGen + JavaDesigner)** : l'objet délégué n'est PAS une classe synthétique dédiée (un temps envisagée sous le nom `<AxeSecondaire>Behavior`, avec sa propre hiérarchie de généralisations pour couvrir tout l'héritage réel de l'axe secondaire). Sur suggestion d'Antonin, la classe primaire porte une référence composée vers **la vraie classe de l'axe secondaire elle-même** (ex. `AttributeDefinition.dataType : DataType`, en utilisant le `DataType` déjà modélisé, pas une classe `DataTypeBehavior` inventée).
+La section suivante documente l'ancien contournement, validé avant le correctif SemGen. Elle sert à expliquer les associations composées actuellement présentes dans `reference/design` et à guider leur suppression. Elle n'est plus une cible de conception.
+
+**Historique** : l'objet délégué n'était pas une classe synthétique dédiée; l'ancienne solution ajoutait une référence composée vers la vraie classe secondaire. Cette solution n'est plus utilisée depuis le correctif SemGen.
 
 **Un détour, corrigé** : la première implémentation de cette idée utilisait un `Attribute` composé (`AttributeDefinition.getOwnedAttribute()`) typé directement par la classe secondaire — plus simple à construire, mais **invalide pour SemGen/JavaDesigner en pratique**. Testé sur le vrai modèle KerML généré : `AttributeImpl.getClassifier`, `AssociationStructureImpl.getStructure` et 5 autres accesseurs échouent à la génération avec `"n'est pas un élément java valide ... vérifier le stéréotype <<JavaClass>>"`. Confirmé par sondage : `<<JavaClass>>` existe mais n'est utilisé par aucune classe du métamodèle Analyst réel (0 sur plusieurs milliers de nœuds), et — constat plus général — **toute référence inter-classes dans l'ensemble du modèle spec/design est modélisée par une `Association` UML, jamais par un `Attribute`** (`Attribute` n'y sert qu'aux types primitifs). Le mécanisme final remplace donc l'attribut composé par une **association composée** :
 - Sur la classe primaire : un bout d'association nommé comme l'ancien attribut (ex. `dataType`), multiplicité `1..1`, agrégation `composite` (portée sur ce bout, celui du tout — cf. la convention déjà en usage pour toute composition dans ce modèle), stéréotype `Semantic`.
@@ -128,7 +132,7 @@ Pour le contenu réel que chaque axe secondaire porte concrètement (attributs/o
 
 **Réserve de Cédric Marin sur ce design** : multiplication des éléments de modèle, coût mémoire/perf, absence de contrôles de cohérence entre les deux objets, besoin d'une façade — le même mur que l'implémentation UML2 de Modelio il y a 15 ans. Traité en détail, avec exemples chiffrés et recommandation en 3 temps, dans `limitation-heritage-multiple-semgen.md` et son support de présentation (`slides-heritage-multiple/`) — document séparé destiné à cette discussion précise, ce point 5 restant le journal technique des essais/décisions. **Suite donnée** : présenté à Cédric, qui a transmis le code source de SemGen. Correctif choisi, implémenté et compilé (`SemGen_4.0.00.jmdac`) — détail technique dans `semgen-patch-heritage-multiple.md`. Projet de test local isolé (consigne Antonin) en place, stéréotypes SemGen appliqués sur un métamodèle de test reprenant `FlowUsage`-like `TestChild` (2 parents réels) ; prochaine étape : lancer `Generate Metamodel` dessus pour la première validation réelle. Suivi détaillé, vivant, dans `limitation-heritage-multiple-semgen.md`.
 
-**Question à trancher** : valide-t-on la règle générale (point 4) et laisse-t-on les 34 cas en découler automatiquement, ou souhaitez-vous une revue cas par cas ? Si revue cas par cas : y a-t-il des cas qui vous semblent contestables à première vue ?
+**Statut** : les 34 cas sont conservés comme généralisations réelles et validés par génération. Le tableau reste une trace de l'analyse des axes primaire/secondaire, pas une procédure de délégation.
 
 *Réf. : Partie 4, slides « Cas 1 · Association » à « Cas 34 · SuccessionFlowUsage », résumées dans « Au bilan : quelles classes deviennent des interfaces pures ».*
 
@@ -187,7 +191,7 @@ SemGen est l'outil interne Modelio qui génère `mm.api`/`mm.impl` à partir d'u
 
 1. **Parcourir `reference/spec` intégralement** (182 classes, 209 généralisations, 351 associations) et créer, dans `reference/design`, une copie de chaque classe avec ses attributs et opérations propres — sans toucher au package `reference/spec` lui-même, qui reste la référence de fidélité.
 
-2. **Appliquer les deux points de greffe** (points 1 et 2 ci-dessus, une fois validés) : renommer la classe `Element` en `KerMLModelElement` et la faire étendre `ModelElement` de l'infrastructure ; créer `SysMLProject` étendant `AbstractProject`.
+2. **Appliquer les deux points de greffe** : renommer la classe `Element` en `KerMLModelElement`, conserver la chaîne d'intégration générée `EObject`/`MObject`/`SmObjectImpl`, et créer `SysMLProject` étendant `AbstractProject`.
 
 3. **Appliquer les stéréotypes et propriétés SemGen** décrits ci-dessus, sur chaque classe/attribut/relation copiés dans `reference/design` :
    - Poser `SemGen::Metamodel` sur le composant racine du métamodèle `reference/design`, avec `Name`, `Id`, `Version`, `Provider`, `Production namespace`.
@@ -199,11 +203,8 @@ SemGen est l'outil interne Modelio qui génère `mm.api`/`mm.impl` à partir d'u
 
 4. **Court-circuiter les trois chevauchements** (point 3) : pour `Comment`, `Documentation`, `Dependency`, `MetadataDefinition` et `MetadataUsage`, ne pas créer de nouvelle classe dans `reference/design` — à la place, rediriger toute référence à ces concepts, partout où ils apparaissent dans les associations et généralisations copiées depuis `reference/spec`, vers les classes d'infrastructure correspondantes (`Note`, `Dependency`, `Stereotype`/`TaggedValue`). Concrètement : partout où une classe de `reference/spec` a un lien vers `Comment` par exemple, ce lien pointera vers `Note` dans `reference/design`.
 
-5. **Résoudre les 34 cas d'héritage multiple** (points 4 et 5), pour chacune des 34 classes concernées. On ne modélise **ni les interfaces `mm.api` ni les classes `mm.impl`** — SemGen génère automatiquement, pour chaque classe stéréotypée `Semantic`/`SemanticLinkMetaclass`, son interface et sa classe d'implémentation. **Vérifié directement sur deux métamodèles déjà générés, indépendamment l'un de l'autre** : ArchiMate (12 classes inspectées à parts égales entre les deux stéréotypes — `Concept`, `Element`, `Relationship`, `Aggregation`, `Composition`…) et Modelio Analyst (21 classes — `AnalystProject`, `Requirement`, `Risk`, `Goal`, `KPI`, `Dictionary`…). Dans les deux cas, 0 interface sans son `XImpl` correspondant, et l'implémentation ajoute systématiquement deux classes internes de plus par concept, `XData` et `XSmClass`, elles aussi générées automatiquement (63 classes `mm.impl` pour 21 interfaces `mm.api` côté Analyst — exactement 3 pour 1). Le script n'a donc qu'à préparer la structure du modèle pour que ce mécanisme produise le bon résultat :
-   - Ne garder qu'**une seule généralisation réelle** vers l'axe primaire (celui qui gagne `extends`) — c'est elle que SemGen traduira en héritage Java, aussi bien pour l'interface générée que pour la classe d'implémentation générée.
-   - Pour chaque axe secondaire, ne rien modéliser côté relation dans `reference/design` — pas de généralisation, pas de `Realization`, aucun stéréotype SemGen ne sait exprimer « cette classe réalise aussi cette interface » (5 mécanismes testés en direct sur le modèle Modelio, tous négatifs — détail complet cf. Points ouverts). Comme l'axe secondaire est lui-même une classe déjà modélisée, SemGen génère déjà son interface et sa propre classe d'implémentation — rien de plus à créer à ce niveau dans `reference/design`. Le lien `implements Secondary` lui-même se fait plus tard, à la main, directement dans le fichier `.java` généré sous `implementation` (cf. Points ouverts pour la procédure complète) — ce n'est pas quelque chose que ce script produit.
-   - Pour chacun des 32 cas traités (34 moins les 2 exclus comme chevauchements), ajouter dans `reference/design` une **association composée**, entre la classe primaire et l'axe secondaire lui-même (pas de classe déléguée synthétique — cf. point 5 « Ce que porte l'axe délégué », design final après correction d'un premier essai en `Attribute` invalide pour SemGen). Ajoutée uniformément, y compris pour les cas « marqueurs purs » (simplicité > micro-optimisation). Chaque association composée porte une `Note` (`note.setSubject(boutPrimaire)`) documentant qu'elle ne vient pas de `reference/spec` et à quel cas elle correspond — pour qu'on puisse la distinguer d'une association réelle de la spec en inspectant `reference/design`.
-   - Gérer le cas particulier à 3 parents (`FlowUsage`, point 22) avec ses deux associations composées.
+5. **Conserver les 34 cas d'héritage multiple** (points 4 et 5), pour chacune des classes concernées. On ne modélise **ni les interfaces `mm.api` ni les classes `mm.impl`** — SemGen génère automatiquement ces éléments. Le script doit recopier toutes les généralisations réelles de `reference/spec`; SemGen conserve les parents dans l'API et aplatit les membres secondaires dans l'implémentation. Les associations composées de l'ancien contournement doivent être supprimées.
+   - Ne créer aucune association composée technique pour représenter un parent secondaire. Les généralisations réelles suffisent; SemGen conserve les parents dans l'API et aplatit les membres secondaires dans l'implémentation.
 
 6. **Vérifier le résultat** : à la fin, comparer `reference/design` à `reference/spec` (mêmes 182 classes présentes, mêmes attributs/opérations, mêmes associations — modulo les redirections du point 3) pour s'assurer qu'aucune classe, attribut ou relation n'a été perdu en chemin. Même logique d'audit que celle déjà appliquée sur `reference/spec` lui-même (0 écart toléré par rapport à la source).
 

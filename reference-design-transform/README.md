@@ -16,16 +16,11 @@ python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skelet
    real nested package/class/enum tree (not flat), skip the 5 chevauchement
    source classes. Writes `class_map_sysml.json`/`class_map_kerml.json`.
 2. `phase2_copy_members.jy` — attributes, operations, enum literals.
-3. `phase3_generalizations_and_composed_attrs.jy` — real generalizations for all
-   classes (single parent each); for the 32 multi-inheritance cases, a
-   composed `Association` between the primary and the real secondary class
-   (no synthetic delegate class, no plain `Attribute` — see point 5; an
-   Attribute-typed-by-a-class version was tried first and confirmed broken at
-   real SemGen/JavaDesigner generation time), each annotated with a
-   traceability `Note` on the primary-side `AssociationEnd`. Both ends get
-   the `Semantic` stereotype, `setTarget()`/`setSource()`, and the primary's
-   end gets `aggregation = composite` — validated on a disposable test
-   metamodel before being applied to the real 33 cases.
+3. `phase3_generalizations_and_composed_attrs.jy` — restore all real
+   generalizations from `reference/spec` into `reference/design`, idempotently.
+   Despite its historical filename, the current script does not create
+   composed delegation associations; patched SemGen handles the multiple
+   inheritance output.
 4. `phase4_associations.jy` — associations + ends, chevauchement redirects.
    **Sets `setTarget()` explicitly on each end** — without it the GUI shows
    `<no type>` everywhere even though owner/opposite/multiplicity are correct
@@ -35,7 +30,8 @@ python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skelet
    both components, `Semantic`/`SemanticLinkMetaclass` on classes/packages/
    enums/attributes/association ends, boolean tags (empty-`TaggedValue`
    convention, confirmed against the real `archimate` metamodel).
-6. `phase6_graft_points.jy` — `Element` → `KerMLModelElement extends ModelElement`;
+6. `phase6_graft_points.jy` — graft the KerML root onto the current Modelio
+   Java integration base (`EObject`/`MObject` through `KerMLModelElement`);
    new `SysMLProject extends AbstractProject`.
 7. `phase7_final_verification.jy` — full count comparison against `reference/spec`
    with the documented expected delta.
@@ -72,17 +68,10 @@ pipeline — API findings from them are already folded into
   non-fatal - generation completes regardless.
 - Association-end properties `structural.isToDelete`,
   `persistency.optional`, `Semantic.link.source`/`target` not set (the
-  composed-Association secondary-axis ends already get `aggregation`/
-  `Semantic` per the validated Phase 3 recipe above; these remaining tags
-  are the doc's lower-priority ones).
+   association-end tags remain lower-priority metadata; the old composed-
+   Association secondary-axis recipe is no longer part of the active pipeline.
 - Whether SemGen/JavaDesigner/reverse generation itself is scriptable from
   Jython (vs. GUI menu only) is untested.
-- The composed-Association secondary axis itself (Phase 3 above) is a
-  workaround, not a conformant fix — SemGen collapses to single inheritance
-  even at the Java interface level, where Java itself would allow multiple
-  `extends`. Real cost (object duplication, no cross-object consistency
-  check, 14 attributes/operations only reachable via an extra accessor hop
-  on 8 of the 32 cases, classification itself lost on all 32) is quantified
-  in `deck-implementation-plan/limitation-heritage-multiple-semgen.md` — not
-  something this transformation can fix from the model side; it would need
-  a SemGen/JavaDesigner generator change.
+- The composed-Association secondary-axis design remains only in the archive
+   and decision history; patched SemGen now handles the real multiple
+   generalizations.

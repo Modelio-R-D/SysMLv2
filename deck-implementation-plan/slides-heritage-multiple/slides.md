@@ -7,6 +7,9 @@ paginate: true
 <!-- _class: title -->
 
 # Héritage multiple SysML v2
+
+> **Mise à jour 2026-09-11** — Ce support décrit l'état historique avant le correctif SemGen. Le correctif `4.0.01` / `semgenerator 1.4.01` conserve désormais l'héritage multiple dans les interfaces et aplatit les membres secondaires dans les implémentations. La cible actuelle est donc de restaurer les généralisations réelles dans `reference/design` et de supprimer les associations de délégation techniques.
+
 ## Ce que SemGen ne sait pas faire, et ce que ça coûte
 
 Réunion de suivi · Septembre 2026
@@ -73,7 +76,7 @@ Reproduit deux fois à l'identique. Trois autres mécanismes testés
 les trois négatifs aussi.
 </div>
 
-<div class="takeaway">SemGen ne sait générer aucune forme d'héritage multiple, sur aucun axe, par aucun mécanisme testé.</div>
+<div class="takeaway">Avant le correctif, SemGen perdait l'héritage multiple. Le correctif conserve les parents dans l'API et aplatit les membres secondaires dans l'implémentation.</div>
 
 ---
 

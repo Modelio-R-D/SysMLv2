@@ -10,7 +10,7 @@ Correctif mené par une session Claude Code distincte, dans le dépôt SemGen lu
 
 | | |
 |---|---|
-| Fichier | `H:\modelio\work\eclipse\modules\SemGen\target\SemGen_4.0.00.jmdac` (366 046 octets) |
+| Fichier | `H:\modelio\work\eclipse\modules\SemGen\target\SemGen_4.0.02.jmdac` |
 | Module id / classe | `SemGen` / `com.modeliosoft.tools.semgen.impl.SemGenMdac` (`module.xml`) |
 | Version module / binaryversion | `4.0.00` / `6.2.0` |
 | uid | `ca5bf67e-736b-4202-844d-9d3a867b2182` |
@@ -175,9 +175,9 @@ Chaque générateur qui énumérait auparavant `mmClass.getOwnedAttribute()`/`ge
 
 ## 6. Statut des tests
 
-- Compilation : ✅ (`SemGen_4.0.00.jmdac` construit sans erreur, §1).
+- Compilation : ✅ (`SemGen_4.0.02.jmdac` construit sans erreur, §1).
 - Round-trip Modelio (édition manuelle → reverse JavaDesigner → ré-import propre) : ✅ confirmé sur les 9 fichiers touchés.
-- Régénération réelle contre `KerML`/`SysML` (34 classes, dont `FlowUsage` à 2 parents secondaires) : **pas encore faite** — prochaine étape, dans un projet local isolé (consigne Antonin, §1), pas contre le fragment partagé `modelio.all`.
+- Régénération réelle contre `KerML` : ✅ génération complète de 81 métaclasses réussie dans le projet live. `DataType`, `Class`, `Structure`, `Flow` et les autres classes concernées sont présentes; les membres des parents secondaires sont aplatis sans réintroduire les associations techniques supprimées.
 - Question ouverte, non vérifiable depuis le seul code source : interaction de l'aplatissement avec la persistance par classe de Modelio (`structural.node`) pour une classe qui serait le 2ᵉ parent d'un cas tout en restant une classe `Semantic` normale ailleurs — à confirmer par la régénération réelle.
 
-Ne pas présenter ce correctif comme validé tant que la régénération réelle n'a pas confirmé qu'il compile et produit le résultat attendu sur les 34 cas.
+La génération KerML live confirme le comportement attendu. La validation restante porte sur la restauration des 34 généralisations dans `reference/design`, puis sur une génération SysML complète et les experts Toutatis.

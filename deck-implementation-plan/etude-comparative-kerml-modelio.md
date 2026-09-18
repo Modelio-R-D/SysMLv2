@@ -67,7 +67,7 @@ En KerML, la cardinalité (`Multiplicity`/`MultiplicityRange`) est elle-même un
 
 Racine absolue de toute la hiérarchie KerML — porte `elementId`, `name`, `shortName`, `qualifiedName`, `ownedRelationship`, `owner`, `documentation`, `textualRepresentation`.
 
-**Candidat Modelio** : `infrastructure::Element` / `ModelElement` — ✅ **équivalent net**, déjà retenu comme point de greffe (Partie 1.1 de la spec principale : `KerMLModelElement extends ModelElement`). Aucun problème de cardinalité identifié à ce niveau — c'est la racine, elle hérite « gratuitement » du mécanisme de composition natif de Modelio (`MObject`).
+**Candidat Modelio** : `infrastructure::Element` / `ModelElement` — précédent UML pertinent, mais le résultat KerML effectivement généré utilise `KerMLModelElement` intégré via `ecore::EObject` et `mapi::MObject`, puis `KerMLModelElementImpl` via `SmObjectImpl`. Le point de greffe reste à distinguer de la chaîne UML historique.
 
 ### A.2 `Relationship` (8.3.2.1.3)
 
