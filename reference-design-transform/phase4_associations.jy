@@ -24,7 +24,7 @@ for root in modelingSession.getModel().getModelRoots():
     if root.getName() == "sysml2":
         sysml2Root = root
         break
-pkgRoot = find_child(sysml2Root, "modelio.sysml2")
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
 refPkg = find_child(pkgRoot, "reference")
 specPkg = find_child(refPkg, "spec")
 designPkg = find_child(refPkg, "design")

@@ -75,3 +75,36 @@ pipeline — API findings from them are already folded into
 - The composed-Association secondary-axis design remains only in the archive
    and decision history; patched SemGen now handles the real multiple
    generalizations.
+
+## Cédric Marin review (2026-09-21) — fixed and open items
+
+- **Fixed live**: `phase5d_fix_and_members.jy` was setting `Semantic.structural.node`
+  on all 171 design classes unconditionally, including the 8 abstract ones
+  (`KerMLModelElement`, `Relationship`, `ConnectorAsUsage`, `ControlNode`,
+  `LoopActionUsage`, `Expose`, `Import`, `InstantiationExpression`) — this is
+  Cédric's "toutes les métaclasses sont flaguées {structural.node}" (every
+  model element ends up in its own persisted file). The convention documented
+  in point 6 ("jamais cochée sur une métaclasse abstraite") was never actually
+  enforced by the script. Corrected live via `phase8_fix_structural_node_abstract.jy`
+  (tag removed from the 8 abstract classes, verified 0/8 flagged afterward)
+  and the pipeline script itself patched (`phase5d` now skips `isIsAbstract()`
+  classes) so a future full regeneration won't reintroduce the bug.
+- **Open, needs a decision** — `KerMLModelElement` (`KerML::Element` grafted
+  onto `infrastructure::ModelElement`, point 1):
+  - `phase2_copy_members.jy` copies `Element`'s own attributes verbatim,
+    including `name`/`declaredName` — duplicating `ModelElement.Name`, which
+    `KerMLModelElement` already inherits. Same question for `elementId`
+    (KerML's own `String{id}` identifier) vs. Modelio's native object UUID.
+  - KerML's `Element` also owns derived/abstract union properties
+    (`/ownedElement`, `ownedRelationship` and their many `subsets`/`redefines`
+    specializations across the spec, e.g. `Type.ownedSpecialization`,
+    `Namespace.ownedMember`). The transform currently has no rule for these:
+    naively materializing both the abstract union and each concrete subset as
+    its own stored, composed reference duplicates the same content under two
+    names. Needs the point-5-style decision: store on the most abstract
+    metaclass with children filtering/auditing, or store only on concrete
+    metaclasses with abstract accessor methods on the parents (and, if so,
+    how to handle a "concrete" metaclass that itself has subclasses).
+  - Tracked as a new point to add to `points-a-trancher.md` before the next
+    `reference/spec` → `reference/design` regeneration.
+
