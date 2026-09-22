@@ -35,6 +35,17 @@ python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skelet
    new `SysMLProject extends AbstractProject`.
 7. `phase7_final_verification.jy` — full count comparison against `reference/spec`
    with the documented expected delta.
+8. `phase8_fix_structural_node_abstract.jy` — one-time live repair removing
+   `Semantic.structural.node` from the eight abstract metaclasses. The guard
+   in `phase5d_fix_and_members.jy` prevents this from recurring on regeneration.
+9. `phase9_copy_documentation.jy` — copy normative Modelio Notes from
+   `reference/spec` to matching `reference/design` classes, attributes,
+   association ends, operations, packages, and enumeration literals. It writes
+   the registered `ModelerModule` `description` and `summary` NoteTypes, and
+   adds the short element name as `summary` where that type is available. This
+   matches the verified Analyst pattern (`Dictionary`: long description, then
+   `Dictionary` summary) and is duplicate-free; repeated runs update the same
+   typed notes without creating additional ones.
 
 `phase1_verify.jy` and `verify_root_ancestry.jy` are standalone re-checks, safe
 to run any time (read-only).

@@ -248,6 +248,28 @@ Trois retours distincts, de gravité différente.
 
 **Statut** : aucune décision prise à ce stade ; à traiter avant la prochaine régénération `reference/spec` → `reference/design`, en particulier avant de relancer `phase3_generalizations_and_composed_attrs.jy`/`phase4_associations.jy` sur les propriétés dérivées.
 
+### 7.4 Documentation SemGen/Javadoc — **copiée**
+
+La documentation normative présente dans `reference/spec` sous forme de `Note`
+Modelio a été copiée vers les éléments correspondants de `reference/design` par
+`phase9_copy_documentation.jy` : 935 notes ajoutées (169 classes, 81 attributs,
+567 rôles d'association, 96 opérations, 19 littéraux d'énumération et 3
+packages). SemGen utilise ces Notes pour produire la Javadoc de l'API générée.
+
+Le script conserve les notes techniques déjà présentes et évite les doublons de
+contenu. Vérification ciblée sur le métamodèle Analyst : `Dictionary` porte une
+note longue de `Description`, puis une note courte de `Summary` contenant son
+nom. `phase9_copy_documentation.jy` applique désormais ce même patron dans
+`reference/spec` et `reference/design` : la description normative est
+conservée, et le nom de l'élément est ajouté comme résumé quand aucun résumé
+n'existe. Une seconde exécution n'a supprimé aucune note et n'a créé aucun
+doublon ; elle réécrit toutefois les contenus typés via l'API Modelio. Les
+éléments exclus ou
+redirigés par le design (`Comment`, `Documentation`, `Dependency`,
+`MetadataDefinition`, `MetadataUsage`) ainsi que les membres non recopiés par
+les phases précédentes restent à traiter si leur documentation doit aussi être
+exposée côté infrastructure ou génération.
+
 ---
 
 ## Points ouverts / non couverts par le plan actuel
