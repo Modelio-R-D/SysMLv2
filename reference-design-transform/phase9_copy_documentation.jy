@@ -1,0 +1,179 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+factory = modelingSession.getModel()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+
+def bfs(root, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    out = []
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        if len(seen) > max_nodes:
+            break
+        try:
+            if not el.isDeleted():
+                out.append(el)
+        except:
+            pass
+        try:
+            for child in el.getCompositionChildren():
+                q.append(child)
+        except:
+            pass
+    return out
+
+def key(el):
+    mcls = el.getMClass().getName()
+    name = el.getName()
+    owner = el.getCompositionOwner()
+    ownerName = owner.getName() if owner else ""
+    return (mcls, ownerName, name)
+
+def notes(el):
+    result = []
+    try:
+        for child in el.getCompositionChildren():
+            if child.getMClass().getName() == "Note":
+                content = child.getContent()
+                if content and content.strip():
+                    result.append(content)
+    except:
+        pass
+    return result
+
+def note_types(element):
+    result = {}
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        name = noteType.getName().lower()
+        if name in ("description", "summary"):
+            result[name] = noteType
+    return result
+
+def typed_content(element, noteType):
+    note = element.getNote(noteType)
+    return note.getContent() if note else None
+
+def set_typed_content(element, kind, content):
+    types = note_types(element)
+    noteType = types.get(kind)
+    if noteType is None:
+        raise Exception("Missing NoteType " + kind + " for " + element.getMClass().getName())
+    element.putNoteContent(noteType, content)
+
+def remove_plain_content(element, contents, protected):
+    removed = 0
+    for child in list(element.getCompositionChildren()):
+        if child.getMClass().getName() == "Note" and child.getUuid() not in protected and child.getContent() in contents:
+            child.delete()
+            removed += 1
+    return removed
+
+def source_description(source):
+    sourceNotes = notes(source)
+    return sourceNotes[0] if sourceNotes else None
+
+def sync_typed_documentation(source, target):
+    description = source_description(source)
+    if not description:
+        return (0, 0, 0)
+    summary = source.getName()
+    sourceTypes = note_types(source)
+    targetTypes = note_types(target)
+    if "description" not in sourceTypes or "description" not in targetTypes:
+        return (0, 0, 0)
+    set_typed_content(source, "description", description)
+    sourceProtected = set([source.getNote(sourceTypes["description"]).getUuid()])
+    if "summary" in sourceTypes:
+        set_typed_content(source, "summary", summary)
+        sourceProtected.add(source.getNote(sourceTypes["summary"]).getUuid())
+    sourceRemoved = remove_plain_content(source, set([description, summary]), sourceProtected)
+    set_typed_content(target, "description", description)
+    targetProtected = set([target.getNote(targetTypes["description"]).getUuid()])
+    if "summary" in targetTypes:
+        set_typed_content(target, "summary", summary)
+        targetProtected.add(target.getNote(targetTypes["summary"]).getUuid())
+    targetRemoved = remove_plain_content(target, set([description, summary]), targetProtected)
+    typedCount = 1 + (1 if "summary" in sourceTypes else 0) + (1 if "summary" in targetTypes else 0)
+    return (typedCount, sourceRemoved + targetRemoved, 1 if "summary" in targetTypes else 0)
+
+def add_summary_if_missing(element):
+    summary = element.getName()
+    if not summary:
+        return 0
+    if summary in set(notes(element)):
+        return 0
+    note = factory.createNote()
+    note.setContent(summary)
+    note.setSubject(element)
+    return 1
+
+specElements = bfs(specPkg)
+designElements = bfs(designPkg)
+# The transformation preserves these member names; owner name disambiguates the model.
+designByKey = {}
+for el in designElements:
+    designByKey[key(el)] = el
+
+matched = 0
+typedNotes = 0
+plainRemoved = 0
+summaryCount = 0
+missing = []
+byMClass = {}
+tr = modelingSession.createTransaction("Phase 9: copy Description and Summary documentation")
+try:
+    for source in specElements:
+        sourceNotes = notes(source)
+        if not sourceNotes:
+            continue
+        target = designByKey.get(key(source))
+        if target is None:
+            missing.append(key(source))
+            continue
+        matched += 1
+        count, removed, summaryCountForElement = sync_typed_documentation(source, target)
+        typedNotes += count
+        plainRemoved += removed
+        summaryCount += summaryCountForElement
+        mcls = source.getMClass().getName()
+        byMClass[mcls] = byMClass.get(mcls, 0) + 1
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "documented source elements:", matched
+print "typed elements by metaclass:", byMClass
+print "typed notes written:", typedNotes
+print "plain notes removed:", plainRemoved
+print "summaries written:", summaryCount
+print "documented source elements without design match:", len(missing)
+for item in missing[:20]:
+    print " missing:", item
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

@@ -2,6 +2,8 @@
 
 > **État actuel 2026-09-16** — Les généralisations multiples réelles sont désormais conservées dans `reference/design`. SemGen `4.0.02` / `semgenerator 1.4.02` génère avec succès KerML (81 métaclasses) et SysML (97 métaclasses) dans `modelio.sysml2::implementation`. Les sections décrivant la délégation manuelle ou les associations composées sont historiques.
 
+> **Mise à jour 2026-09-21** — Relecture de Cédric Marin sur `reference/design` : voir point 7 ci-dessous. Un des trois retours (`structural.node` posé sans discernement sur toutes les métaclasses) est corrigé en direct sur le modèle live et dans le script `phase5d_fix_and_members.jy` ; les deux autres (`KerMLModelElement`, stockage des associations abstraites/dérivées) restent ouverts.
+
 Document de travail préparant la demande d'Antonin : la liste des décisions sur lesquelles nous avons besoin d'un arbitrage, extraites du plan d'implémentation (`slides.md`). Chaque point renvoie à la partie du deck qui détaille le raisonnement et les exemples.
 
 ## 1. Point de greffe sur l'infrastructure
@@ -211,6 +213,62 @@ SemGen est l'outil interne Modelio qui génère `mm.api`/`mm.impl` à partir d'u
 **Pourquoi un script plutôt qu'une transformation manuelle** : `reference/spec` compte 182 classes — refaire cette greffe à la main serait long et source d'erreurs, et surtout non reproductible si `reference/spec` est corrigé plus tard (coquilles, mises à jour de spec) ou si une des règles ci-dessus change. Un script réexécutable permet de régénérer `reference/design` à l'identique à chaque fois, à partir des mêmes règles.
 
 Ce point découle mécaniquement des points 1 à 5 — il est mentionné ici pour que l'équipe sache ce qui suit une fois ces points validés, et pour resituer l'effort restant : la partie modélisation/conception est faite, il reste l'implémentation outillée de ce qui a été décidé.
+
+---
+
+## 7. Relecture de Cédric Marin sur `reference/design` (2026-09-21)
+
+Trois retours distincts, de gravité différente.
+
+### 7.1 `structural.node` posé sans discernement — **corrigé**
+
+**Constat de Cédric** : « toutes les métaclasses sont flaguées `{structural.node}` ==> chaque élément de modèle va être dans son propre fichier ! » (chaque classe stéréotypée `Semantic` devient une unité de persistance séparée, cf. tableau du point 6).
+
+**Vérifié en direct sur le modèle live** : les 171 classes de `reference/design`, y compris les 8 classes abstraites (`KerMLModelElement`, `Relationship`, `ConnectorAsUsage`, `ControlNode`, `LoopActionUsage`, `Expose`, `Import`, `InstantiationExpression`), portaient toutes la propriété `Semantic.structural.node` cochée. Or le point 6 documente déjà la règle « jamais cochée sur une métaclasse abstraite » — jamais appliquée par le script `phase5d_fix_and_members.jy`, qui la posait en boucle sur toutes les classes sans filtre.
+
+**Correctif appliqué** : tag retiré en direct sur les 8 classes abstraites (script `phase8_fix_structural_node_abstract.jy`, ciblage nominal, transaction commitée, vérifié 0/8 après coup), et `phase5d_fix_and_members.jy` corrigé pour ignorer désormais les classes `isIsAbstract()` — une régénération complète future ne réintroduira pas le problème. Les 162 classes concrètes restent flaguées `structural.node`, ce qui reste conforme à la convention documentée (une classe concrète est par défaut un « grain » persisté séparément), mais reste un point à surveiller si certaines classes concrètes de `reference/design` devaient plutôt être persistées avec leur parent (embarquées, pas encore tranché — voir 7.3, mécanisme apparenté).
+
+### 7.2 `KerMLModelElement` : `Name` redéfini, `elementId` — **ouvert**
+
+**Constat de Cédric** : `KerMLModelElement` (greffe du point 1, `KerML::Element` étendant `infrastructure::ModelElement`) redéfinit `Name` alors que `ModelElement` la porte déjà nativement, et porte aussi `elementId`.
+
+**Vérifié** : `phase2_copy_members.jy` recopie tels quels tous les attributs propres de `KerML::Element` depuis `reference/spec`, dont `name`/`declaredName` (dupliquant `ModelElement.Name`, déjà hérité) et `elementId` (l'identifiant `String{id}` propre à KerML, à comparer à l'UUID natif que porte déjà tout objet Modelio).
+
+**Question à trancher** : soit supprimer ces attributs dupliqués sur `KerMLModelElement` et documenter le mapping vers les équivalents natifs Modelio (`Name`, UUID objet), soit justifier pourquoi ils doivent malgré tout être portés explicitement (ex. sémantique KerML légèrement différente de `Name` — `effectiveName()` avec règle de calcul propre à certains éléments, cf. `kerml.txt` §Root, ligne ~7230).
+
+### 7.3 Associations abstraites/dérivées (union/subset) dupliquées — **ouvert**
+
+**Constat de Cédric**, illustré par lui : `SmDependency ownedElementDep; SmDependency ownedRelationshipDep` — sentiment que le design duplique le même contenu sous deux noms.
+
+**Analyse** : `KerML::Element` porte, dans la spec, une propriété dérivée abstraite `/ownedElement : Element [0..*] {ordered}` et son sous-ensemble concret stocké `ownedRelationship : Relationship [0..*] {subsets relationship, ordered}` — le même patron (union abstraite dérivée + multiples `subsets`/`redefines` concrets) se répète largement dans la spec (`Type.ownedSpecialization`, `Namespace.ownedMember`, `Membership.memberElementId`/`ownedMemberElementId`…). `reference/spec` recopie fidèlement ce patron ; `reference/design` n'a pour l'instant aucune règle pour le résoudre avant génération SemGen, avec le risque que les deux (l'union abstraite et chaque sous-ensemble concret) finissent stockés séparément — même contenu dupliqué en mémoire/persistance.
+
+**Question à trancher** (formulée par Cédric) — choisir entre :
+- stocker sur la métaclasse la plus abstraite, les métaclasses filles filtrant/auditant le contenu hérité (pas de stockage propre en fille) ; ou
+- stocker sur les métaclasses concrètes, avec méthodes abstraites/dérivées sur les parents recalculant l'union à la volée — avec la sous-question : que faire quand une métaclasse « concrète » a elle-même des filles concrètes (le stockage doit-il alors migrer, ou la fille répète-t-elle le même dilemme un niveau plus bas) ?
+
+**Statut** : aucune décision prise à ce stade ; à traiter avant la prochaine régénération `reference/spec` → `reference/design`, en particulier avant de relancer `phase3_generalizations_and_composed_attrs.jy`/`phase4_associations.jy` sur les propriétés dérivées.
+
+### 7.4 Documentation SemGen/Javadoc — **copiée**
+
+La documentation normative présente dans `reference/spec` sous forme de `Note`
+Modelio a été copiée vers les éléments correspondants de `reference/design` par
+`phase9_copy_documentation.jy` : 935 notes ajoutées (169 classes, 81 attributs,
+567 rôles d'association, 96 opérations, 19 littéraux d'énumération et 3
+packages). SemGen utilise ces Notes pour produire la Javadoc de l'API générée.
+
+Le script conserve les notes techniques déjà présentes et évite les doublons de
+contenu. Vérification ciblée sur le métamodèle Analyst : `Dictionary` porte une
+note longue de `Description`, puis une note courte de `Summary` contenant son
+nom. `phase9_copy_documentation.jy` applique désormais ce même patron dans
+`reference/spec` et `reference/design` : la description normative est
+conservée, et le nom de l'élément est ajouté comme résumé quand aucun résumé
+n'existe. Une seconde exécution n'a supprimé aucune note et n'a créé aucun
+doublon ; elle réécrit toutefois les contenus typés via l'API Modelio. Les
+éléments exclus ou
+redirigés par le design (`Comment`, `Documentation`, `Dependency`,
+`MetadataDefinition`, `MetadataUsage`) ainsi que les membres non recopiés par
+les phases précédentes restent à traiter si leur documentation doit aussi être
+exposée côté infrastructure ou génération.
 
 ---
 
