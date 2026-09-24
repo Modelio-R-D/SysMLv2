@@ -1,103 +1,147 @@
-icone_sysml1;type_sysml2;concept_sysml2_definition;concept_sysml2_usage;action;confiance;commentaire;
-block;element;PartDefinition;PartUsage;recolorer;haute;Block v1 se scinde en couple Definition/Usage;
-part;element;;PartUsage;recolorer;haute;Definition correspondante = PartDefinition, couverte par la ligne block;
-constraintblock;element;ConstraintDefinition;ConstraintUsage;recolorer;haute;;
-constraintproperty;element;;ConstraintUsage;recolorer;moyenne;usage en tant que feature typee ; Definition couverte par la ligne constraintblock
-valuetype;element;AttributeDefinition;AttributeUsage;recolorer;moyenne;ValueType v1 -> AttributeDefinition en v2;
-flowspecification;element;ItemDefinition;ItemUsage;recolorer;moyenne;correspond au type de payload transporte (confirme dans Items.sysml), proche du role de FlowSpecification en v1;
-flowproperty;element;;ItemUsage (direction in/out);derive;moyenne;en v2 la direction est un modificateur de feature (in/out) ; Definition couverte par la ligne flowspecification
-flowport_in;element;PortDefinition;PortUsage (direction in);derive;haute;confirme dans Ports.sysml - reprendre l'icone port + badge de direction, comme standard.parameter.io.png en UML;
-flowport_out;element;PortDefinition;PortUsage (direction out);derive;haute;idem flowport_in;
-flowport_inout;element;PortDefinition;PortUsage (direction inout);derive;haute;idem flowport_in;
-port;element;PortDefinition;PortUsage;recolorer;haute;;
-interface;element;InterfaceDefinition;InterfaceUsage;recolorer;haute;;
-interfacerealization;relation;InterfaceRealization (relation);;recolorer;moyenne;relation KerML, pas de dualite Definition/Usage - a valider selon type exact;
-itemflow;element;FlowDefinition;FlowUsage;recolorer;haute;"confirme dans Flows.sysml (mot-cle ""flow def""/""flow""), pas FlowConnection";
-requirement;element;RequirementDefinition;RequirementUsage;recolorer;haute;;
-testcase;element;VerificationCaseDefinition;VerificationCaseUsage;recolorer;haute;confirme dans VerificationCases.sysml;
-viewpoint;element;ViewpointDefinition;ViewpointUsage;recolorer;haute;;
-view;element;ViewDefinition;ViewUsage;recolorer;haute;;
-usecase;element;UseCaseDefinition;UseCaseUsage;recolorer;haute;;
-statemachine;element;StateDefinition;StateUsage;recolorer;moyenne;arbre d'etats remplace le concept de machine a etats autonome;
-activity;element;ActionDefinition;ActionUsage;recolorer;moyenne;;
-interaction;element;;OccurrenceUsage / EventOccurrenceUsage;creer;basse;"icone SysML1 ""interaction"" existe (cadre de sequence) mais semantiquement eloignee d'Occurrence "; Definition (OccurrenceDefinition) non couverte par une icone source, voir ligne ajoutee en fin de tableau
-signal;element;ItemDefinition;ItemUsage;recolorer;basse;a valider - pas retrouve comme metaclasse dediee, probablement un ItemDefinition specialise;
-allocate;element;AllocationDefinition;AllocationUsage;recolorer;haute;confirme dans Allocations.sysml;
-refine;relation;Refine / DeriveRequirement (relation);;recolorer;moyenne;relation KerML entre exigences, pas de dualite Definition/Usage - a valider selon type exact;
-trace;relation;Trace (relation);;recolorer;haute;;
-rationale;autre;;;recolorer;basse;base SysML1 rationale.png disponible, pas de metaclasse dediee confirmee - a traiter probablement comme Documentation;
-problem;element;ConcernDefinition;ConcernUsage;recolorer;haute;concept normatif v2 = Concern (confirme dans Requirements.sysml), reprendre problem.png comme base et recolorer;
-conform;relation;Conform (relation);;recolorer;moyenne;;
-association;relation;Association / Connection (relation);;recolorer;haute;notation largement inchangee;
-aggregation;relation;FeatureMembership composite=false (relation);;recolorer;haute;;
-composition;relation;FeatureMembership composite=true (relation);;recolorer;haute;;
-generalization;relation;Specialization (relation);;recolorer;haute;;
-dependency;relation;Dependency (relation);;recolorer;haute;;
-package;autre;Package;;recolorer;haute;pas de dualite Definition/Usage pour un espace de noms;
-packageimport;relation;Import (relation);;recolorer;haute;;
-packagemerge;relation;;;recolorer;basse;a valider - le merge de packages n'est pas garanti identique en v2;
-elementimport;relation;Import (relation);;recolorer;haute;;
-enumeration;element;EnumerationDefinition;;recolorer;haute;correction : anciennement place par erreur dans la colonne usage;
-enumerationliteral;element;;EnumerationUsage;recolorer;haute;Definition couverte par la ligne enumeration;
-datatype;element;;;recolorer;moyenne;a valider vs AttributeDefinition;
-class;autre;;;recolorer;basse;SysML v2 n'a pas de Class au sens UML - a discuter;
-component;element;PartDefinition (stereotype);;recolorer;basse;a valider - Component v1 sans equivalent direct, rapprocher de PartDefinition ; correction : anciennement place par erreur dans la colonne usage
-connector;element;ConnectionDefinition;ConnectionUsage;recolorer;haute;confirme dans Connections.sysml;
-bindingconnector;element;;BindingConnector;recolorer;basse;pas de sous-type binding explicite trouve dans Connections.sysml - a verifier dans le noyau KerML (Bindings);
-naryassociation;relation;relation n-aire;;recolorer;moyenne;;
-narylink;relation;;;recolorer;basse;a valider;
-parameter;element;;;recolorer;haute;parametre de feature/action conserve;
-parameterreturn;element;;;recolorer;moyenne;;
-note;autre;;Comment;recolorer;haute;Comment n'a pas de pendant Definition;
-operation;element;;;recolorer;moyenne;a valider - notion de Behavior/Function en v2;
-attributelink;autre;;FeatureValue;recolorer;moyenne;liaison de valeur, pas de dualite Definition/Usage;
-bindableinstance;element;;;recolorer;basse;a valider;
-collaboration;element;;;recolorer;basse;a valider - non prioritaire;
-collaborationuse;element;;;recolorer;basse;a valider - non prioritaire;
-smartimport;autre;;;recolorer;basse;fonctionnalite Modelio specifique, pas un concept SysML;
-smartgeneralization;autre;;;recolorer;basse;fonctionnalite Modelio specifique, pas un concept SysML;
-propertyspecifictype;element;;;recolorer;basse;a valider;
-participantproperty;element;;;recolorer;basse;a valider;
-distributedproperty;element;;;recolorer;basse;a valider;
-connectorproperty;element;;;recolorer;basse;a valider;
-optional;autre;;;recolorer;basse;multiplicite optionnelle - a valider si icone dediee necessaire;
-continuous;autre;;;recolorer;basse;bibliotheque Quantities and Units - a valider si icone dediee necessaire en v2;
-discrete;autre;;;recolorer;basse;idem continuous;
-continuousparameter;autre;;;recolorer;basse;idem continuous;
-discreteparameter;autre;;;recolorer;basse;idem continuous;
-rate;autre;;;recolorer;basse;idem continuous;
-rateparameter;autre;;;recolorer;basse;idem continuous;
-probability;autre;;;recolorer;basse;idem continuous;
-unit;autre;;;recolorer;basse;bibliotheque Quantities and Units;
-quantitykind;autre;;;recolorer;basse;bibliotheque Quantities and Units;
-providedinterface;element;;InterfaceUsage (port provided);recolorer;moyenne;Definition couverte par la ligne interface;
-requiredinterface;element;;InterfaceUsage (port required);recolorer;moyenne;Definition couverte par la ligne interface;
-umlcomposition;relation;;;recolorer;basse;doublon visuel de composition - a clarifier;
-associationclass;element;;;recolorer;basse;a valider - notion non garantie en v2;
-informationflow;element;FlowDefinition;FlowUsage;recolorer;haute;meme correction que itemflow, confirme dans Flows.sysml;
-templatebinding;relation;;;recolorer;basse;a valider;
-raisedexception;autre;;;recolorer;basse;a valider;
-reference;autre;;ReferenceUsage;recolorer;haute;reference n'a pas de pendant Definition en KerML (mot-cle de non-appartenance);
-sysml;autre;;;recolorer;haute;icone racine du formalisme / projet;
-blockdiagram;diagramme;;;recolorer;haute;a adapter en diagramme de definition;
-internalblockdiagram;diagramme;;;recolorer;haute;a adapter en diagramme de definition interne;
-packagediagram;diagramme;;;recolorer;haute;;
-parametricdiagram;diagramme;;;recolorer;haute;;
-sysmlactivitydiagram;diagramme;;;recolorer;haute;;
-sysmlrequirementdiagram;diagramme;;;recolorer;haute;;
-sysmlsequencediagram;diagramme;;;recolorer;haute;;
-sysmlstatemachinediagram;diagramme;;;recolorer;haute;;
-sysmlusecasediagram;diagramme;;;recolorer;haute;;
-previewactivitydiagram;diagramme;;;recolorer;basse;vignette de previsualisation - a regenerer en masse par script;
-previewblockdiagram;diagramme;;;recolorer;basse;idem;
-previewinternalblockdiagram;diagramme;;;recolorer;basse;idem;
-previewpackagediagram;diagramme;;;recolorer;basse;idem;
-previewparametricdiagram;diagramme;;;recolorer;basse;idem;
-previewsequencediagram;diagramme;;;recolorer;basse;idem;
-previewstatediagram;diagramme;;;recolorer;basse;idem;
-previewusecasediagram;diagramme;;;recolorer;basse;idem;
-;element;MetadataDefinition;MetadataUsage;creer;haute;pas de base SysML1 ni UML pertinente (aucun concept de metadonnee/stereotype dans mmimages uml.ui) - a dessiner;
-;element;AnalysisCaseDefinition;AnalysisCaseUsage;derive;haute;pas de base UML mais base SysML1 disponible par proximite : deriver de testcase.png (meme famille que VerificationCase) plutot que creer ex nihilo;
-;element;RenderingDefinition (Textual/Graphical/Tabular);RenderingUsage;creer;moyenne;pas de base SysML1 ; repli UML partiel possible (standard.artifact.png) mais peu convaincant semantiquement - a dessiner
-;element;OccurrenceDefinition;OccurrenceUsage;derive;moyenne;pas de base SysML1 - repli UML : standard.event.png (evenement/occurrence dans le temps) ; couvre la Definition manquante de la ligne interaction - a valider avec le PO
-;element;IndividualDefinition;IndividualUsage;derive;moyenne;pas de base SysML1 - repli UML : standard.instance.png / standard.instancenode.png;
+icone_sysml1;type_sysml2;concept_sysml2_definition;concept_sysml2_usage;action;confiance;commentaire;chemin_source;chemin_destination
+block;element;PartDefinition;PartUsage;recolorer;haute;Block v1 se scinde en couple Definition/Usage;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\block.png;icons-study/07-icones-sources/sysml1/block.png
+part;element;;PartUsage;recolorer;haute;Definition correspondante = PartDefinition, couverte par la ligne block;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\part.png;icons-study/07-icones-sources/sysml1/part.png
+constraintblock;element;ConstraintDefinition;ConstraintUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\constraintblock.png;icons-study/07-icones-sources/sysml1/constraintblock.png
+constraintproperty;element;;ConstraintUsage;recolorer;haute;usage en tant que feature typee - Definition couverte par la ligne constraintblock - visuel coherent (symbole accolades {}), confirme comme la vraie base pour ConstraintUsage (verifie visuellement le 2026-09-24, a distinguer de constraint.png qui n'est pas pertinent);C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\constraintproperty.png;icons-study/07-icones-sources/sysml1/constraintproperty.png
+valuetype;element;AttributeDefinition;;recolorer;haute;ValueType v1 -> AttributeDefinition en v2 - icone contient les lettres VT gravees en dur dans les pixels, valable uniquement pour la Definition (verifie visuellement le 2026-09-24) - AttributeUsage retiree de cette ligne, couverte separement;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\valuetype.png;icons-study/07-icones-sources/sysml1/valuetype.png
+flowspecification;element;ItemDefinition;ItemUsage;recolorer;moyenne;correspond au type de payload transporte (confirme dans Items.sysml), proche du role de FlowSpecification en v1;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowspecification.png;icons-study/07-icones-sources/sysml1/flowspecification.png
+flowproperty;element;;ItemUsage (direction in/out);derive;moyenne;en v2 la direction est un modificateur de feature (in/out) - Definition couverte par la ligne flowspecification;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowproperty.png;icons-study/07-icones-sources/sysml1/flowproperty.png
+flowport_in;element;PortDefinition;PortUsage (direction in);derive;haute;confirme dans Ports.sysml - reprendre l'icone port + badge de direction, comme standard.parameter.io.png en UML;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowport_in.png;icons-study/07-icones-sources/sysml1/flowport_in.png
+flowport_out;element;PortDefinition;PortUsage (direction out);derive;haute;idem flowport_in;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowport_out.png;icons-study/07-icones-sources/sysml1/flowport_out.png
+flowport_inout;element;PortDefinition;PortUsage (direction inout);derive;haute;idem flowport_in;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowport_inout.png;icons-study/07-icones-sources/sysml1/flowport_inout.png
+port;element;PortDefinition;PortUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\port.png;icons-study/07-icones-sources/sysml1/port.png
+interface;element;InterfaceDefinition;InterfaceUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\interface.png;icons-study/07-icones-sources/sysml1/interface.png
+interfacerealization;relation;InterfaceRealization (relation);;recolorer;moyenne;relation KerML, pas de dualite Definition/Usage - a valider selon type exact;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\interfacerealization.png;icons-study/07-icones-sources/sysml1/interfacerealization.png
+itemflow;element;FlowDefinition;FlowUsage;recolorer;haute;"confirme dans Flows.sysml (mot-cle ""flow def""/""flow""), pas FlowConnection";C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\itemflow.png;icons-study/07-icones-sources/sysml1/itemflow.png
+requirement;element;RequirementDefinition;RequirementUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\requirement.png;icons-study/07-icones-sources/sysml1/requirement.png
+testcase;element;VerificationCaseDefinition;VerificationCaseUsage;recolorer;haute;confirme dans VerificationCases.sysml;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\testcase.png;icons-study/07-icones-sources/sysml1/testcase.png
+viewpoint;element;ViewpointDefinition;ViewpointUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\viewpoint.png;icons-study/07-icones-sources/sysml1/viewpoint.png
+view;element;ViewDefinition;ViewUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\view.png;icons-study/07-icones-sources/sysml1/view.png
+usecase;element;UseCaseDefinition;UseCaseUsage;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\usecase.png;icons-study/07-icones-sources/sysml1/usecase.png
+statemachine;element;StateDefinition;StateUsage;recolorer;moyenne;arbre d'etats remplace le concept de machine a etats autonome;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\statemachine.png;icons-study/07-icones-sources/sysml1/statemachine.png
+activity;element;ActionDefinition;ActionUsage;recolorer;moyenne;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\activity.png;icons-study/07-icones-sources/sysml1/activity.png
+interaction;element;;OccurrenceUsage / EventOccurrenceUsage;creer;basse;"icone SysML1 ""interaction"" existe (cadre de sequence) mais semantiquement eloignee d'Occurrence - Definition (OccurrenceDefinition) non couverte par une icone source, voir ligne ajoutee en fin de tableau";C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\interaction.png;icons-study/07-icones-sources/sysml1/interaction.png
+signal;element;ItemDefinition;ItemUsage;recolorer;basse;a valider - pas retrouve comme metaclasse dediee, probablement un ItemDefinition specialise;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\signal.png;icons-study/07-icones-sources/sysml1/signal.png
+allocate;element;AllocationDefinition;AllocationUsage;recolorer;haute;confirme dans Allocations.sysml;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\allocate.png;icons-study/07-icones-sources/sysml1/allocate.png
+refine;relation;Refine / DeriveRequirement (relation);;recolorer;moyenne;relation KerML entre exigences, pas de dualite Definition/Usage - a valider selon type exact;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\refine.png;icons-study/07-icones-sources/sysml1/refine.png
+trace;relation;Trace (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\trace.png;icons-study/07-icones-sources/sysml1/trace.png
+rationale;autre;;;recolorer;basse;base SysML1 rationale.png disponible, pas de metaclasse dediee confirmee - a traiter probablement comme Documentation;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\rationale.png;icons-study/07-icones-sources/sysml1/rationale.png
+problem;element;ConcernDefinition;ConcernUsage;recolorer;haute;concept normatif v2 = Concern (confirme dans Requirements.sysml), reprendre problem.png comme base et recolorer;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\problem.png;icons-study/07-icones-sources/sysml1/problem.png
+conform;relation;Conform (relation);;recolorer;moyenne;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\conform.png;icons-study/07-icones-sources/sysml1/conform.png
+association;relation;Association / Connection (relation);;recolorer;haute;notation largement inchangee;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\association.png;icons-study/07-icones-sources/sysml1/association.png
+aggregation;relation;FeatureMembership composite=false (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\aggregation.png;icons-study/07-icones-sources/sysml1/aggregation.png
+composition;relation;FeatureMembership composite=true (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\composition.png;icons-study/07-icones-sources/sysml1/composition.png
+generalization;relation;Specialization (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\generalization.png;icons-study/07-icones-sources/sysml1/generalization.png
+dependency;relation;Dependency (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\dependency.png;icons-study/07-icones-sources/sysml1/dependency.png
+package;autre;Package;;recolorer;haute;pas de dualite Definition/Usage pour un espace de noms;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\package.png;icons-study/07-icones-sources/sysml1/package.png
+packageimport;relation;Import (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\packageimport.png;icons-study/07-icones-sources/sysml1/packageimport.png
+packagemerge;relation;;;recolorer;basse;a valider - le merge de packages n'est pas garanti identique en v2;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\packagemerge.png;icons-study/07-icones-sources/sysml1/packagemerge.png
+elementimport;relation;Import (relation);;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\elementimport.png;icons-study/07-icones-sources/sysml1/elementimport.png
+enumeration;element;EnumerationDefinition;;recolorer;haute;correction : anciennement place par erreur dans la colonne usage;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\enumeration.png;icons-study/07-icones-sources/sysml1/enumeration.png
+enumerationliteral;element;;EnumerationUsage;recolorer;haute;Definition couverte par la ligne enumeration;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\enumerationliteral.png;icons-study/07-icones-sources/sysml1/enumerationliteral.png
+datatype;element;;;recolorer;moyenne;a valider vs AttributeDefinition;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\datatype.png;icons-study/07-icones-sources/sysml1/datatype.png
+class;autre;;;recolorer;basse;SysML v2 n'a pas de Class au sens UML - a discuter;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\class.png;icons-study/07-icones-sources/sysml1/class.png
+component;element;PartDefinition (stereotype);;recolorer;basse;a valider - Component v1 sans equivalent direct, rapprocher de PartDefinition - correction : anciennement place par erreur dans la colonne usage;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\component.png;icons-study/07-icones-sources/sysml1/component.png
+connector;element;ConnectionDefinition;ConnectionUsage;recolorer;haute;confirme dans Connections.sysml;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\connector.png;icons-study/07-icones-sources/sysml1/connector.png
+bindingconnector;element;;BindingConnector;recolorer;moyenne;pas de sous-type binding explicite trouve dans Connections.sysml - a verifier dans le noyau KerML (Bindings) - icone d'arbre de modele (visuel : simple fleche double, sans les losanges de binding.png qui est l'icone de palette/outil du meme concept, verifie visuellement le 2026-09-24);C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\bindingconnector.png;icons-study/07-icones-sources/sysml1/bindingconnector.png
+naryassociation;relation;relation n-aire;;recolorer;moyenne;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\naryassociation.png;icons-study/07-icones-sources/sysml1/naryassociation.png
+narylink;relation;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\narylink.png;icons-study/07-icones-sources/sysml1/narylink.png
+parameter;element;;;recolorer;haute;parametre de feature/action conserve;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\parameter.png;icons-study/07-icones-sources/sysml1/parameter.png
+parameterreturn;element;;;recolorer;moyenne;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\parameterreturn.png;icons-study/07-icones-sources/sysml1/parameterreturn.png
+note;autre;;Comment;recolorer;haute;Comment n'a pas de pendant Definition;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\note.png;icons-study/07-icones-sources/sysml1/note.png
+operation;element;;;recolorer;moyenne;a valider - notion de Behavior/Function en v2;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\operation.png;icons-study/07-icones-sources/sysml1/operation.png
+attributelink;autre;;FeatureValue;recolorer;moyenne;liaison de valeur, pas de dualite Definition/Usage;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\attributelink.png;icons-study/07-icones-sources/sysml1/attributelink.png
+bindableinstance;element;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\bindableinstance.png;icons-study/07-icones-sources/sysml1/bindableinstance.png
+collaboration;element;;;recolorer;basse;a valider - non prioritaire;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\collaboration.png;icons-study/07-icones-sources/sysml1/collaboration.png
+collaborationuse;element;;;recolorer;basse;a valider - non prioritaire;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\collaborationuse.png;icons-study/07-icones-sources/sysml1/collaborationuse.png
+smartimport;autre;;;recolorer;basse;fonctionnalite Modelio specifique, pas un concept SysML;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\smartimport.png;icons-study/07-icones-sources/sysml1/smartimport.png
+smartgeneralization;autre;;;recolorer;basse;fonctionnalite Modelio specifique, pas un concept SysML;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\smartgeneralization.png;icons-study/07-icones-sources/sysml1/smartgeneralization.png
+propertyspecifictype;element;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\propertyspecifictype.png;icons-study/07-icones-sources/sysml1/propertyspecifictype.png
+participantproperty;element;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\participantproperty.png;icons-study/07-icones-sources/sysml1/participantproperty.png
+distributedproperty;element;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\distributedproperty.png;icons-study/07-icones-sources/sysml1/distributedproperty.png
+connectorproperty;element;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\connectorproperty.png;icons-study/07-icones-sources/sysml1/connectorproperty.png
+optional;autre;;;recolorer;basse;multiplicite optionnelle - a valider si icone dediee necessaire;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\optional.png;icons-study/07-icones-sources/sysml1/optional.png
+continuous;autre;;;recolorer;basse;bibliotheque Quantities and Units - a valider si icone dediee necessaire en v2;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\continuous.png;icons-study/07-icones-sources/sysml1/continuous.png
+discrete;autre;;;recolorer;basse;idem continuous;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\discrete.png;icons-study/07-icones-sources/sysml1/discrete.png
+continuousparameter;autre;;;recolorer;basse;idem continuous;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\continuousparameter.png;icons-study/07-icones-sources/sysml1/continuousparameter.png
+discreteparameter;autre;;;recolorer;basse;idem continuous;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\discreteparameter.png;icons-study/07-icones-sources/sysml1/discreteparameter.png
+rate;autre;;;recolorer;basse;idem continuous;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\rate.png;icons-study/07-icones-sources/sysml1/rate.png
+rateparameter;autre;;;recolorer;basse;idem continuous;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\rateparameter.png;icons-study/07-icones-sources/sysml1/rateparameter.png
+probability;autre;;;recolorer;basse;idem continuous;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\probability.png;icons-study/07-icones-sources/sysml1/probability.png
+unit;autre;;;recolorer;basse;bibliotheque Quantities and Units;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\unit.png;icons-study/07-icones-sources/sysml1/unit.png
+quantitykind;autre;;;recolorer;basse;bibliotheque Quantities and Units;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\quantitykind.png;icons-study/07-icones-sources/sysml1/quantitykind.png
+providedinterface;element;;InterfaceUsage (port provided);recolorer;moyenne;Definition couverte par la ligne interface;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\providedinterface.png;icons-study/07-icones-sources/sysml1/providedinterface.png
+requiredinterface;element;;InterfaceUsage (port required);recolorer;moyenne;Definition couverte par la ligne interface;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\requiredinterface.png;icons-study/07-icones-sources/sysml1/requiredinterface.png
+umlcomposition;relation;;;recolorer;basse;doublon visuel de composition - a clarifier;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\umlcomposition.png;icons-study/07-icones-sources/sysml1/umlcomposition.png
+associationclass;element;;;recolorer;basse;a valider - notion non garantie en v2;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\associationclass.png;icons-study/07-icones-sources/sysml1/associationclass.png
+informationflow;element;FlowDefinition;FlowUsage;recolorer;haute;meme correction que itemflow, confirme dans Flows.sysml;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\informationflow.png;icons-study/07-icones-sources/sysml1/informationflow.png
+templatebinding;relation;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\templatebinding.png;icons-study/07-icones-sources/sysml1/templatebinding.png
+raisedexception;autre;;;recolorer;basse;a valider;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\raisedexception.png;icons-study/07-icones-sources/sysml1/raisedexception.png
+reference;autre;;ReferenceUsage;recolorer;haute;reference n'a pas de pendant Definition en KerML (mot-cle de non-appartenance);C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\reference.png;icons-study/07-icones-sources/sysml1/reference.png
+sysml;autre;;;recolorer;haute;icone racine du formalisme / projet;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysml.png;icons-study/07-icones-sources/sysml1/sysml.png
+blockdiagram;diagramme;;;recolorer;haute;a adapter en diagramme de definition;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\blockdiagram.png;icons-study/07-icones-sources/sysml1/blockdiagram.png
+internalblockdiagram;diagramme;;;recolorer;haute;a adapter en diagramme de definition interne;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\internalblockdiagram.png;icons-study/07-icones-sources/sysml1/internalblockdiagram.png
+packagediagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\packagediagram.png;icons-study/07-icones-sources/sysml1/packagediagram.png
+parametricdiagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\parametricdiagram.png;icons-study/07-icones-sources/sysml1/parametricdiagram.png
+sysmlactivitydiagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmlactivitydiagram.png;icons-study/07-icones-sources/sysml1/sysmlactivitydiagram.png
+sysmlrequirementdiagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmlrequirementdiagram.png;icons-study/07-icones-sources/sysml1/sysmlrequirementdiagram.png
+sysmlsequencediagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmlsequencediagram.png;icons-study/07-icones-sources/sysml1/sysmlsequencediagram.png
+sysmlstatemachinediagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmlstatemachinediagram.png;icons-study/07-icones-sources/sysml1/sysmlstatemachinediagram.png
+sysmlusecasediagram;diagramme;;;recolorer;haute;;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmlusecasediagram.png;icons-study/07-icones-sources/sysml1/sysmlusecasediagram.png
+previewactivitydiagram;diagramme;;;recolorer;basse;vignette de previsualisation - a regenerer en masse par script;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewactivitydiagram.png;icons-study/07-icones-sources/sysml1/previewactivitydiagram.png
+previewblockdiagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewblockdiagram.png;icons-study/07-icones-sources/sysml1/previewblockdiagram.png
+previewinternalblockdiagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewinternalblockdiagram.png;icons-study/07-icones-sources/sysml1/previewinternalblockdiagram.png
+previewpackagediagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewpackagediagram.png;icons-study/07-icones-sources/sysml1/previewpackagediagram.png
+previewparametricdiagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewparametricdiagram.png;icons-study/07-icones-sources/sysml1/previewparametricdiagram.png
+previewsequencediagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewsequencediagram.png;icons-study/07-icones-sources/sysml1/previewsequencediagram.png
+previewstatediagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewstatediagram.png;icons-study/07-icones-sources/sysml1/previewstatediagram.png
+previewusecasediagram;diagramme;;;recolorer;basse;idem;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\previewusecasediagram.png;icons-study/07-icones-sources/sysml1/previewusecasediagram.png
+;element;MetadataDefinition;MetadataUsage;creer;haute;pas de base SysML1 ni UML pertinente (aucun concept de metadonnee/stereotype dans mmimages uml.ui) - a dessiner - correction (croisee avec le metamodele Java implemente sur la branche feature/sysml2, modelio/sysml/sysml.metamodel.api) : la metaclasse reellement implementee est MetadataFeature, sans dualite Definition/Usage separee - a corriger dans cette ligne;;
+;element;AnalysisCaseDefinition;AnalysisCaseUsage;derive;haute;pas de base UML mais base SysML1 disponible par proximite : deriver de testcase.png (meme famille que VerificationCase) plutot que creer ex nihilo;;
+;element;RenderingDefinition (Textual/Graphical/Tabular);RenderingUsage;creer;moyenne;pas de base SysML1 - repli UML partiel possible (standard.artifact.png) mais peu convaincant semantiquement - a dessiner;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.artifact.png;icons-study/07-icones-sources/uml/standard.artifact.png
+;element;OccurrenceDefinition;OccurrenceUsage;derive;moyenne;pas de base SysML1 - repli UML : standard.event.png (evenement/occurrence dans le temps) - couvre la Definition manquante de la ligne interaction - a valider avec le PO;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.event.png;icons-study/07-icones-sources/uml/standard.event.png
+;element;IndividualDefinition;IndividualUsage;derive;moyenne;pas de base SysML1 - repli UML : standard.instance.png / standard.instancenode.png - a valider : IndividualDefinition/IndividualUsage n'apparaissent pas dans le metamodele Java implemente sur la branche feature/sysml2 (modelio/sysml/sysml.metamodel.api, 183 metaclasses recensees) - verifier si le concept est prevu pour une iteration ulterieure ou hors perimetre de cette version de l'implementation;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.instance.png;icons-study/07-icones-sources/uml/standard.instance.png
+block48;element;PartDefinition;;recolorer;haute;variante grande taille (48px) de block.png, meme concept;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\block48.png;icons-study/07-icones-sources/sysml1/block48.png
+constraintblock48;element;ConstraintDefinition;;recolorer;haute;variante 48px de constraintblock.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\constraintblock48.png;icons-study/07-icones-sources/sysml1/constraintblock48.png
+valuetype48;element;AttributeDefinition;;recolorer;haute;variante 48px de valuetype.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\valuetype48.png;icons-study/07-icones-sources/sysml1/valuetype48.png
+view48;element;ViewDefinition;ViewUsage;recolorer;haute;variante 48px de view.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\view48.png;icons-study/07-icones-sources/sysml1/view48.png
+viewpoint48;element;ViewpointDefinition;ViewpointUsage;recolorer;haute;variante 48px de viewpoint.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\viewpoint48.png;icons-study/07-icones-sources/sysml1/viewpoint48.png
+unit48;autre;;;recolorer;basse;variante 48px de unit.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\unit48.png;icons-study/07-icones-sources/sysml1/unit48.png
+quantitykind48;autre;;;recolorer;basse;variante 48px de quantitykind.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\quantitykind48.png;icons-study/07-icones-sources/sysml1/quantitykind48.png
+flowspecification48;element;ItemDefinition;ItemUsage;recolorer;moyenne;variante 48px de flowspecification.png;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowspecification48.png;icons-study/07-icones-sources/sysml1/flowspecification48.png
+binding;relation;;BindingConnector;recolorer;moyenne;icone de palette/outil de diagramme pour tracer un binding connector (visuel : deux losanges relies par une double fleche) - a distinguer de bindingconnector.png qui semble etre l'icone d'arbre de modele du meme concept (verifie visuellement le 2026-09-24);C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\binding.png;icons-study/07-icones-sources/sysml1/binding.png
+link_delegate;relation;;;recolorer;basse;connecteur de delegation - a valider si un concept distinct existe en v2 (sinon = ConnectionUsage standard);C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\link_delegate.png;icons-study/07-icones-sources/sysml1/link_delegate.png
+sysmlback;autre;;;recolorer;haute;icone de navigation UI (retour), pas un element de modele - a exclure du perimetre;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmlback.png;icons-study/07-icones-sources/sysml1/sysmlback.png
+backback;autre;;;recolorer;haute;icone de navigation UI (retour), pas un element de modele - a exclure du perimetre;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\backback.png;icons-study/07-icones-sources/sysml1/backback.png
+usage;autre;Usage;;recolorer;basse;metaclasse abstraite racine (KerML), utile comme icone de secours generique uniquement;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\usage.png;icons-study/07-icones-sources/sysml1/usage.png
+;element;;AcceptActionUsage;recolorer;haute;pas de base SysML1 - repli UML : standard.acceptsignalaction.png - Definition couverte par ActionDefinition (ligne activity), ce sous-type n'a pas de Definition dediee;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.acceptsignalaction.png;icons-study/07-icones-sources/uml/standard.acceptsignalaction.png
+;element;;SendActionUsage;recolorer;haute;pas de base SysML1 - repli UML : standard.sendsignalaction.png - idem AcceptActionUsage;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.sendsignalaction.png;icons-study/07-icones-sources/uml/standard.sendsignalaction.png
+;element;;AssignmentActionUsage;creer;basse;aucune base SysML1 ni UML pertinente identifiee - a dessiner;;
+;element;;IfActionUsage;recolorer;moyenne;pas de base SysML1 - repli UML : standard.conditionalnode.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.conditionalnode.png;icons-study/07-icones-sources/uml/standard.conditionalnode.png
+;element;;LoopActionUsage;recolorer;moyenne;pas de base SysML1 - repli UML : standard.loopnode.png - ForLoopActionUsage/WhileLoopActionUsage = variantes avec badge for/while, meme base;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.loopnode.png;icons-study/07-icones-sources/uml/standard.loopnode.png
+;element;;PerformActionUsage;recolorer;moyenne;pas de base SysML1 - repli UML : standard.callbehavioraction.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.callbehavioraction.png;icons-study/07-icones-sources/uml/standard.callbehavioraction.png
+;element;;TerminateActionUsage;derive;basse;pas de base SysML1 - repli UML : standard.flowfinalnode.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.flowfinalnode.png;icons-study/07-icones-sources/uml/standard.flowfinalnode.png
+;element;;ForkNode;recolorer;moyenne;pas de base SysML1 - repli UML : standard.forkjoinnode.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.forkjoinnode.png;icons-study/07-icones-sources/uml/standard.forkjoinnode.png
+;element;;JoinNode;recolorer;moyenne;pas de base SysML1 - repli UML : standard.forkjoinnode.png (meme pictogramme que ForkNode en UML);H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.forkjoinnode.png;icons-study/07-icones-sources/uml/standard.forkjoinnode.png
+;element;;MergeNode;recolorer;haute;pas de base SysML1 - repli UML : standard.mergenode.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.mergenode.png;icons-study/07-icones-sources/uml/standard.mergenode.png
+;element;;DecisionNode;recolorer;haute;pas de base SysML1 - repli UML : standard.decisionmergenode.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.decisionmergenode.png;icons-study/07-icones-sources/uml/standard.decisionmergenode.png
+;element;;TransitionUsage;recolorer;haute;pas de base SysML1 - repli UML : standard.transition.png - Definition non applicable (relation de StateUsage);H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.transition.png;icons-study/07-icones-sources/uml/standard.transition.png
+;element;;EventOccurrenceUsage;derive;basse;pas de base SysML1 - repli UML : standard.event.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.event.png;icons-study/07-icones-sources/uml/standard.event.png
+;element;;ExhibitStateUsage;derive;basse;variante de StateUsage (etat exhibe par une occurrence) - repli UML : standard.state.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.state.png;icons-study/07-icones-sources/uml/standard.state.png
+;element;;AssertConstraintUsage;derive;moyenne;variante de ConstraintUsage (assertion) - badge sur la base constraintproperty.png;;
+;element;;Invariant;derive;moyenne;variante permanente de ConstraintUsage - badge sur la base constraintproperty.png;;
+;element;ConjugatedPortDefinition;;derive;moyenne;variante miroir de PortDefinition (port conjugue) - badge sur la base port.png;;
+;element;;BindingConnectorAsUsage;recolorer;moyenne;forme usage de BindingConnector, meme base que bindingconnector.png/binding.png;;
+;element;;SatisfyRequirementUsage;derive;moyenne;variante de RequirementUsage avec badge de verification (check) - base requirement.png;;
+;element;;IncludeUseCaseUsage;recolorer;haute;pas de base SysML1 - repli UML : standard.usecasedependencyinclude.png;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.usecasedependencyinclude.png;icons-study/07-icones-sources/uml/standard.usecasedependencyinclude.png
+;element;CalculationDefinition;CalculationUsage;derive;basse;pas de base SysML1 dediee - rapprocher de ConstraintDefinition/Usage (comportement retournant une valeur), base constraintblock.png/constraintproperty.png;;
+;autre;LibraryPackage;;derive;moyenne;variante de Package (bibliotheque) - badge sur la base package.png;;
+;autre;SysMLProject;;aucune;haute;icone deja existante dans le module cible (sysml.sysmlproject.png) - aucune action requise;;H:\modelio\work\modelio-source\modelio\sysml\sysml.ui\mmimages\sysml.sysmlproject.png
+;element;;AttributeUsage;derive;moyenne;pas de base SysML1 utilisable - repli UML : standard.attribute.png (lettre 'a' generique, pas de nom de type grave en dur contrairement a valuetype.png) - trou expose par la correction du 2026-09-24 sur la ligne valuetype;H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages\standard.attribute.png;icons-study/07-icones-sources/uml/standard.attribute.png
+actor;element;PartDefinition (stereotype);PartUsage (stereotype);derive;basse;Actor n'est plus une metaclasse en v2 (role porte par un PartUsage/etiquette) - a confirmer si un badge bonhomme est conserve sur PartDefinition/PartUsage;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\actor.png;icons-study/07-icones-sources/sysml1/actor.png
+constraint;autre;;;recolorer;basse;visuellement different de constraintproperty.png (petite pochette/etiquette orange, pas de symbole d'accolades) - ne represente pas clairement une contrainte, a ne PAS utiliser comme base pour ConstraintUsage (verifie visuellement le 2026-09-24) - role reel dans SysMLArchitect a identifier avant reutilisation;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\constraint.png;icons-study/07-icones-sources/sysml1/constraint.png
+flowport_indiagram;element;PortDefinition;PortUsage (direction in);derive;moyenne;vignette de diagramme de flowport_in.png, meme concept;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowport_indiagram.png;icons-study/07-icones-sources/sysml1/flowport_indiagram.png
+flowport_inoutdiagram;element;PortDefinition;PortUsage (direction inout);derive;moyenne;vignette de diagramme de flowport_inout.png, meme concept;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowport_inoutdiagram.png;icons-study/07-icones-sources/sysml1/flowport_inoutdiagram.png
+flowport_outdiagram;element;PortDefinition;PortUsage (direction out);derive;moyenne;vignette de diagramme de flowport_out.png, meme concept;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\flowport_outdiagram.png;icons-study/07-icones-sources/sysml1/flowport_outdiagram.png
+sysmldiagram;diagramme;;;recolorer;haute;icone generique de type de diagramme SysML;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\sysmldiagram.png;icons-study/07-icones-sources/sysml1/sysmldiagram.png
+traceability;relation;Trace (relation);;recolorer;haute;doublon visuel confirme de trace.png (image identique, verifie visuellement le 2026-09-24) - ne garder qu'un seul des deux fichiers en base de production, l'autre est superflu;C:\Users\frekik\Documents\GIT\ExtensionsForModelio\SysMLArchitect\src\main\conf\res\icons\traceability.png;icons-study/07-icones-sources/sysml1/traceability.png
