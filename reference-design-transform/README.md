@@ -1,27 +1,52 @@
-# reference/spec → reference/design transformation scripts
+# reference/spec → reference/design transformation and repair scripts
 
-Builds `reference/design` (SemGen-ready) from `reference/spec` (pure UML fidelity
-mirror, untouched) in the live `sysml2` Modelio project. See
+This folder is a collection of numbered Modelio scripts, not a single 28-step
+pipeline. The initial assembly sequence builds `reference/design` from
+`reference/spec` (the UML-fidelity mirror); later scripts record targeted
+repairs and corrections, including reversals of earlier changes. The scripts
+operate on the live `sysml2` Modelio project. See
 `deck-implementation-plan/points-a-trancher.md` (points 1–6 and "Points ouverts")
 for the full design rationale.
+
+**Status, 2026-09-24:** the generated metamodel is not yet validated for release.
+Redefined storage and derived-accessor generation remain partially implemented.
+See [SemGen redefinition status](semgen-redefinitions-status.md) for tested
+behavior, known bypasses and the release gate. The 4.0.06 archive is an older
+local work-in-progress candidate, not a package of the latest source changes.
+The user handles deployment; no automatic module installation is planned.
+
+Latest progress: the pre-mutation controller has a tested callback-reentrancy
+guard; runtime-source extraction and Java override emission helpers have been
+added. These helpers are not yet wired into generation. Runtime-source tests
+still lack a completed result, and the last full-suite result predates these
+additions. See the [evidence and integration status](semgen-redefinitions-status.md).
 
 Run each script via ScriptServer:
 ```
 python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skeleton_sysml.jy
 ```
 
-## Pipeline, in order
+## Initial assembly sequence: scripts 1–13
+
+These are the scripts used to assemble and initially repair `reference/design`.
+The numbering is historical, and this sequence is **not safe to replay wholesale**:
+several scripts create components, members, associations, or generalizations
+without checking whether they already exist. Run only the needed script against
+the expected model state; do not interpret the list as an automated runner.
 
 1. `phase1_copy_skeleton_sysml.jy`, `phase1_copy_skeleton_kerml.jy` — recreate the
    real nested package/class/enum tree (not flat), skip the 5 chevauchement
    source classes. Writes `class_map_sysml.json`/`class_map_kerml.json`.
-2. `phase2_copy_members.jy` — attributes, operations, enum literals.
+2. `phase2_copy_members.jy` — attributes, operations, enum literals. Skips
+   `Element.name` and `Element.elementId`, mapped respectively to native
+   `ModelElement.Name` and the Modelio object UUID.
 3. `phase3_generalizations_and_composed_attrs.jy` — restore all real
    generalizations from `reference/spec` into `reference/design`, idempotently.
    Despite its historical filename, the current script does not create
    composed delegation associations; patched SemGen handles the multiple
    inheritance output.
-4. `phase4_associations.jy` — associations + ends, chevauchement redirects.
+4. `phase4_associations.jy` — associations + ends, chevauchement redirects,
+   and normative `AssociationEnd.isDerived` flags.
    **Sets `setTarget()` explicitly on each end** — without it the GUI shows
    `<no type>` everywhere even though owner/opposite/multiplicity are correct
    (`api-gotchas.md` Error 28).
@@ -33,8 +58,9 @@ python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skelet
 6. `phase6_graft_points.jy` — graft the KerML root onto the current Modelio
    Java integration base (`EObject`/`MObject` through `KerMLModelElement`);
    new `SysMLProject extends AbstractProject`.
-7. `phase7_final_verification.jy` — full count comparison against `reference/spec`
-   with the documented expected delta.
+7. `phase7_final_verification.jy` — prints class/element counts for comparison
+   and fails if either tree contains a live, unnamed `EnumerationLiteral`. It
+   does **not** enforce an expected count delta; `EXPECTED_DELTA` is empty.
 8. `phase8_fix_structural_node_abstract.jy` — one-time live repair removing
    `Semantic.structural.node` from the eight abstract metaclasses. The guard
    in `phase5d_fix_and_members.jy` prevents this from recurring on regeneration.
@@ -46,9 +72,60 @@ python3 ../ModelioSkill/skills/modelio/scripts/modelio-cli.py phase1_copy_skelet
    matches the verified Analyst pattern (`Dictionary`: long description, then
    `Dictionary` summary) and is duplicate-free; repeated runs update the same
    typed notes without creating additional ones.
+   10. `phase10_remove_kerml_model_element_duplicates.jy` — one-time live repair
+      removing `KerMLModelElement.name` and `elementId`; Phase 2 prevents their
+      recreation.
+   11. `phase11_normalize_structural_nodes.jy` — keep exactly 28 persistence
+      grains: `SysMLProject`, `Package`/`LibraryPackage`, and the 25 concrete
+      `Definition` classes present in the design. Usages and implementation
+      details remain embedded. Repeated no-op runs skip project save.
+   12. `phase12_restore_derived_association_ends.jy` — restore 291 normative
+      derived flags across 548 unambiguously matched association ends, leaving
+      8 documented transform artifacts untouched. Repeated no-op runs skip save.
+   13. `phase13_remove_non_spec_duplicates.jy` — incomplete cleanup attempt for
+      `KerMLModelElement.annotation`, `KerMLModelElement.membership`, and
+      `Redefinition.owningFeature`. It inspects owned UML attributes, whereas
+      these residual roles are association ends. Its no-op did NOT prove their
+      removal; they remain in the audited 4.0.05 output. Do not use this script
+      as an association-cleanliness check. Review opposite roles before repair.
 
 `phase1_verify.jy` and `verify_root_ancestry.jy` are standalone re-checks, safe
 to run any time (read-only).
+
+## History of targeted repairs: scripts 15–28
+
+This is a chronological repair record, not a continuation of the assembly
+sequence. Dates below are included only when recorded in
+`semgen-redefinitions-status.md`; dates for scripts 15–23 were not found in the
+workspace history. The filenames retain their legacy `phase` prefix.
+
+| Script | Date recorded | Operation |
+|---|---|---|
+| 15 | Not recorded | Backfill opposite-end `Redefines` notes. |
+| 16 | Not recorded | Revert same-class notes introduced by script 15. |
+| 17 | Not recorded | Correct stale `Redefines` note references. |
+| 18 | Not recorded | Copy `Element` documentation onto `KerMLModelElement`. |
+| 19 | Not recorded | Backfill documented association-end descriptions in `reference/spec`. |
+| 20 | Not recorded | Propagate association-end descriptions to `reference/design`. |
+| 21 | Not recorded | Add explanatory prose alongside design redefinition notes. |
+| 22 | Not recorded | Reapply same-class redefinition notes. |
+| 23 | Not recorded | Backfill second-layer reciprocal notes. |
+| 24 | 2026-09-26 | Record four redefinitions that cannot be expressed as generator directives; correct earlier redirects. |
+| 25 | 2026-09-26 | Record two further unexpressible connection redefinitions. |
+| 26 | 2026-09-26 | Revert five incorrect reciprocal notes from script 23. |
+| 27 | 2026-09-26 | Correct six `Redefines` notes that should be `Subsets`. |
+| 28 | 2026-09-26 | Add two missing composite marks to redefining association ends. |
+
+Some scripts explicitly undo or correct earlier changes: 16 reverses part of
+15; 24 corrects four references from 17; 26 reverts five notes from 23. Scripts
+19–21 depend on `final_ownedend_fixes.json` in a user-specific temporary
+directory, which is not tracked in this workspace. Review each script's
+preconditions and transaction before running it; do not run all numbered
+scripts in sequence.
+
+`phase14_create_process_diagram.jy` creates a Modelio diagram for the original
+1–13 assembly sequence only. It does not represent this repair history or
+execute the scripts, and rerunning it creates more model elements.
 
 ## `archive/`
 
@@ -63,20 +140,20 @@ discover the real Modelio API along the way. Not part of the reusable
 pipeline — API findings from them are already folded into
 `ModelioSkill/skills/modelio/references/api-gotchas.md`.
 
-## Known gaps (don't block generation — see `points-a-trancher.md`)
+## Known gaps (including release blockers)
 
-- Attribute `Value` defaults not set — causes a real `ERROR Attribute X has
-  no initial value` line per attribute during generation (~30 across
-  KerML+SysML, mostly booleans). **Deliberately left unset, not a gap to
-  close**: verified directly against both `kerml.txt` and `sysml.txt` that
-  the OMG spec text itself never assigns a default to any of these
-  attributes (bare `attrName : Type` declarations throughout, no `= value`
-  anywhere), and neither mature reference metamodel we have access to
-  (`analyst`, `archimate`) sets a default on a single boolean attribute
-  either (checked directly: 2 non-boolean defaults total across both, out
-  of thousands of attributes). Fabricating `true`/`false` here would assert
-  something the spec deliberately leaves open. The `ERROR` in the log is
-  non-fatal - generation completes regardless.
+- Attribute `Value` defaults are not fully resolved. The earlier blanket claim
+   that the specifications contain no defaults was incorrect: redefinition
+   examples include `isReference = true` and operator literals. Distinguish
+   defaults from derived/fixed-value constraints using the normative source;
+   do not invent values where none are specified. The current candidate rejects
+   explicit changed defaults it cannot preserve.
+- Redefinition adapters do not yet protect inherited and inverse mutation
+   paths. The typed collection prototype is tested but not wired into generated
+   accessors. See [current implementation status](semgen-redefinitions-status.md).
+- Restoring association `isDerived` suppresses stored fields/descriptors, but
+   the 4.0.05 Java audit still found calls to omitted descriptor getters. Derived
+   computations and complete generated-code compilation remain release blockers.
 - Association-end properties `structural.isToDelete`,
   `persistency.optional`, `Semantic.link.source`/`target` not set (the
    association-end tags remain lower-priority metadata; the old composed-
@@ -87,7 +164,7 @@ pipeline — API findings from them are already folded into
    and decision history; patched SemGen now handles the real multiple
    generalizations.
 
-## Cédric Marin review (2026-09-21) — fixed and open items
+## Cédric Marin review — model repairs and remaining generation work
 
 - **Fixed live**: `phase5d_fix_and_members.jy` was setting `Semantic.structural.node`
   on all 171 design classes unconditionally, including the 8 abstract ones
@@ -98,24 +175,24 @@ pipeline — API findings from them are already folded into
   in point 6 ("jamais cochée sur une métaclasse abstraite") was never actually
   enforced by the script. Corrected live via `phase8_fix_structural_node_abstract.jy`
   (tag removed from the 8 abstract classes, verified 0/8 flagged afterward)
-  and the pipeline script itself patched (`phase5d` now skips `isIsAbstract()`
-  classes) so a future full regeneration won't reintroduce the bug.
-- **Open, needs a decision** — `KerMLModelElement` (`KerML::Element` grafted
-  onto `infrastructure::ModelElement`, point 1):
-  - `phase2_copy_members.jy` copies `Element`'s own attributes verbatim,
-    including `name`/`declaredName` — duplicating `ModelElement.Name`, which
-    `KerMLModelElement` already inherits. Same question for `elementId`
-    (KerML's own `String{id}` identifier) vs. Modelio's native object UUID.
-  - KerML's `Element` also owns derived/abstract union properties
-    (`/ownedElement`, `ownedRelationship` and their many `subsets`/`redefines`
-    specializations across the spec, e.g. `Type.ownedSpecialization`,
-    `Namespace.ownedMember`). The transform currently has no rule for these:
-    naively materializing both the abstract union and each concrete subset as
-    its own stored, composed reference duplicates the same content under two
-    names. Needs the point-5-style decision: store on the most abstract
-    metaclass with children filtering/auditing, or store only on concrete
-    metaclasses with abstract accessor methods on the parents (and, if so,
-    how to handle a "concrete" metaclass that itself has subclasses).
-  - Tracked as a new point to add to `points-a-trancher.md` before the next
-    `reference/spec` → `reference/design` regeneration.
+   and the pipeline script itself patched with the final 28-class whitelist.
+- **Fixed live**: `KerMLModelElement.name` and `elementId` removed; native
+   `ModelElement.Name` and the Modelio UUID are authoritative. The distinct
+   KerML declared/short/qualified naming fields remain.
+- **Model flags restored; generation incomplete**: 291 derived ends among
+   548 unambiguous mappings; `ownedElement` is derived and `ownedRelationship`
+   is stored. This does not implement the derived accessors or establish
+   canonical storage for every subset/redefinition. The generated Java audit
+   exposed remaining storage duplication and missing descriptor getters.
+
+## Live repository safety
+
+- Never call `projectService.saveProject()` after a no-op transaction. Phase 8
+   now skips save when it removes no tag; Phases 11 and 12 do the same.
+- A full Modeliotool restart requires interactive login and a slow
+   `Modelio.All` mount. Do not treat these delays as a hang or probe the model
+   while it is opening.
+- After the 2026-09-22 cache collision, a full restart restored the fragment;
+   targeted verification found the project clean and no new
+   `RepositoryClosedException`/`DuplicateObjectException` in the log.
 
