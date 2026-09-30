@@ -1,0 +1,71 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+TARGET_ATTRIBUTES = set(["name", "elementId"])
+
+def find_child(element, name):
+    if element is None:
+        return None
+    for child in element.getCompositionChildren():
+        if child.getName() == name:
+            return child
+    return None
+
+roots = [root for root in modelingSession.getModel().getModelRoots() if root.getName() == "sysml2"]
+if len(roots) != 1:
+    raise Exception("expected one sysml2 root, found " + str(len(roots)))
+
+design = find_child(find_child(find_child(roots[0], "modelio.sysml"), "reference"), "design")
+if design is None:
+    raise Exception("reference/design not found")
+
+queue = deque([design])
+seen = set()
+target = None
+while queue and len(seen) < 3000 and target is None:
+    element = queue.popleft()
+    element_id = element.getUuid()
+    if element_id in seen:
+        continue
+    seen.add(element_id)
+    try:
+        if element.getMClass().getName() == "Class" and element.getName() == "KerMLModelElement":
+            target = element
+            break
+    except:
+        pass
+    try:
+        for child in element.getCompositionChildren():
+            queue.append(child)
+    except:
+        pass
+
+if target is None:
+    raise Exception("KerMLModelElement not found")
+
+duplicates = [attribute for attribute in target.getOwnedAttribute() if attribute.getName() in TARGET_ATTRIBUTES]
+found_names = set([attribute.getName() for attribute in duplicates])
+if found_names != TARGET_ATTRIBUTES or len(duplicates) != len(TARGET_ATTRIBUTES):
+    raise Exception("expected exactly name and elementId once, found " + str([attribute.getName() for attribute in duplicates]))
+
+parents = [generalization.getSuperType() for generalization in target.getParent() if generalization.getSuperType() is not None]
+model_element_parents = [parent for parent in parents if parent.getName() == "ModelElement"]
+if len(model_element_parents) != 1:
+    raise Exception("expected exactly one ModelElement parent")
+if "Name" not in [attribute.getName() for attribute in model_element_parents[0].getOwnedAttribute()]:
+    raise Exception("ModelElement.Name not found")
+
+transaction = modelingSession.createTransaction("Phase 10: remove KerMLModelElement native duplicates")
+try:
+    for attribute in duplicates:
+        attribute.delete()
+    transaction.commit()
+    print "COMMITTED OK, attributes removed:", sorted(found_names)
+except Exception, error:
+    transaction.rollback()
+    print "ROLLED BACK:", error
+    raise
+
+projectService.saveProject(NullProgressMonitor())
+print "remaining attributes:", sorted([attribute.getName() for attribute in target.getOwnedAttribute()])
+print "isDirty after save:", projectService.isDirty()

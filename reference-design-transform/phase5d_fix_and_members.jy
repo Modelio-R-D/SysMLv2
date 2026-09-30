@@ -3,6 +3,18 @@ from collections import deque
 
 factory = modelingSession.getModel()
 
+STRUCTURAL_NODE_CLASSES = set([
+    "ActionDefinition", "AllocationDefinition", "AnalysisCaseDefinition",
+    "AttributeDefinition", "CalculationDefinition", "CaseDefinition",
+    "ConcernDefinition", "ConjugatedPortDefinition", "ConnectionDefinition",
+    "ConstraintDefinition", "Definition", "EnumerationDefinition",
+    "FlowDefinition", "InterfaceDefinition", "ItemDefinition",
+    "LibraryPackage", "OccurrenceDefinition", "Package", "PartDefinition",
+    "PortDefinition", "RenderingDefinition", "RequirementDefinition",
+    "StateDefinition", "SysMLProject", "UseCaseDefinition",
+    "VerificationCaseDefinition", "ViewDefinition", "ViewpointDefinition",
+])
+
 def find_child(el, name):
     for c in el.getCompositionChildren():
         if c.getName() == name:
@@ -93,11 +105,13 @@ try:
         set_empty_tag(comp, isExtTagType)
         stats["isExtension"] += 1
     for cls in designClasses:
-        # Never checked on an abstract metaclass (see points-a-trancher.md, point 6).
-        if cls.isIsAbstract():
-            continue
-        set_empty_tag(cls, structNodeTagType)
-        stats["structural.node"] += 1
+        # Separate files are reserved for packages, concrete Definitions, and
+        # the project root. Usages and implementation details stay embedded.
+        if cls.getName() in STRUCTURAL_NODE_CLASSES:
+            if cls.isIsAbstract():
+                raise Exception("structural node whitelist contains abstract class: " + cls.getName())
+            set_empty_tag(cls, structNodeTagType)
+            stats["structural.node"] += 1
 
     # Attribute and AssociationEnd Semantic stereotype, matching confirmed real spec pattern.
     for attr in designAttrs:

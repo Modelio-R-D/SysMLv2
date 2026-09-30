@@ -54,8 +54,11 @@ print "spec classes/enums:", len(specByName), "design classes/enums:", len(desig
 
 stats = {"Attribute": 0, "Operation": 0, "Parameter": 0, "ReturnParameter": 0, "EnumerationLiteral": 0,
          "attr_type_primitive": 0, "attr_type_resolved": 0, "attr_type_unresolved": 0,
-         "param_type_primitive": 0, "param_type_resolved": 0, "param_type_unresolved": 0}
+         "param_type_primitive": 0, "param_type_resolved": 0, "param_type_unresolved": 0,
+         "native_modelio_duplicates_skipped": 0}
 unresolved_types = set()
+
+NATIVE_MODELIO_DUPLICATES = set(["name", "elementId"])
 
 def resolve_type(srcTypeEl):
     # If it's one of our copied classes/enums, use the design-side counterpart by name.
@@ -79,16 +82,21 @@ try:
         if mcls == "Enumeration":
             for lit in srcEl.getCompositionChildren():
                 try:
-                    if lit.getMClass().getName() != "EnumerationLiteral":
+                    if lit.isDeleted() or lit.getMClass().getName() != "EnumerationLiteral":
                         continue
                 except:
                     continue
+                if lit.getName() is None or lit.getName().strip() == "":
+                    raise Exception("blank EnumerationLiteral in source enum: " + srcEl.getName())
                 factory.createEnumerationLiteral(lit.getName(), newEl)
                 stats["EnumerationLiteral"] += 1
             continue
 
         # Class: copy Attributes
         for attr in srcEl.getOwnedAttribute():
+            if name == "Element" and attr.getName() in NATIVE_MODELIO_DUPLICATES:
+                stats["native_modelio_duplicates_skipped"] += 1
+                continue
             newAttr = factory.createAttribute()
             newAttr.setName(attr.getName())
             resolvedType, wasResolved = resolve_type(attr.getType())

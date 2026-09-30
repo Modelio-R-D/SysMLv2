@@ -1,0 +1,139 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Six notes in reference/design claim
+#     Redefines (per normative XMI): KerMLModelElement.sourceRelationship
+# but the normative XMI declares no <redefinedProperty> on any of them. It declares
+# <subsettedProperty> toward A_source_sourceRelationship.sourceRelationship AND toward
+# Element.ownedRelationship:
+#
+#     Namespace.ownedImport            subsets sourceRelationship, ownedRelationship
+#     Namespace.ownedMembership        subsets membership, sourceRelationship, ownedRelationship
+#     Type.ownedDifferencing           subsets sourceRelationship, ownedRelationship
+#     Type.ownedIntersecting           subsets sourceRelationship, ownedRelationship
+#     Type.ownedUnioning               subsets sourceRelationship, ownedRelationship
+#     Feature.ownedFeatureChaining     subsets sourceRelationship, ownedRelationship
+#
+# Subsetting is not storage sharing, so these must not carry the Redefines directive: it made
+# PropertyRedefinition reject them ("aggregation KindIsComposition vs KindIsAssociation"), which
+# looked like a composite-vs-reference modelling decision but was only a bad note. The composite
+# mark on these properties is correct and stays as it is.
+#
+# Correction: turn the single wrong Redefines line into the corresponding Subsets line, which the
+# generator does not read. Nothing else in the note is touched.
+
+WRONG = "Redefines (per normative XMI): KerMLModelElement.sourceRelationship"
+RIGHT = "Subsets (per normative XMI): KerMLModelElement.sourceRelationship"
+
+TARGETS = [
+    ("Namespace", "ownedImport"),
+    ("Namespace", "ownedMembership"),
+    ("Type", "ownedDifferencing"),
+    ("Type", "ownedIntersecting"),
+    ("Type", "ownedUnioning"),
+    ("Feature", "ownedFeatureChaining"),
+]
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for nt in mmExt.findNoteTypes("", element.getMClass()):
+        if nt.getName().lower() == "description":
+            return nt
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+resolved = []
+for owner_name, end_name in TARGETS:
+    cls = find_class(designPkg, owner_name)
+    if cls is None:
+        raise Exception("class not found: " + owner_name)
+    member = None
+    for e in cls.getOwnedEnd():
+        if e.getName() == end_name:
+            member = e
+            break
+    if member is None:
+        raise Exception("end not found: " + owner_name + "." + end_name)
+    current = description_content(member)
+    if not current:
+        raise Exception("no description on %s.%s" % (owner_name, end_name))
+    lines = current.split("\n")
+    hits = [i for i, ln in enumerate(lines) if ln.strip() == WRONG]
+    if len(hits) != 1:
+        raise Exception("expected exactly 1 wrong line in %s.%s, found %d: %r" % (
+            owner_name, end_name, len(hits), current))
+    if RIGHT in current:
+        raise Exception("%s.%s already carries the Subsets line: %r" % (owner_name, end_name, current))
+    lines[hits[0]] = RIGHT
+    resolved.append((member, owner_name, end_name, current, "\n".join(lines)))
+
+print "verified, ready to correct:", len(resolved)
+for member, o, e, before, after in resolved:
+    print "  %s.%s" % (o, e)
+    print "    before: %r" % before
+    print "    after : %r" % after
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 27: sourceRelationship is subset, not redefinition (6 notes)")
+try:
+    for member, o, e, before, after in resolved:
+        set_description(member, after)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes corrected:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

@@ -1,0 +1,147 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Re-applies the "Redefines (per normative XMI): ..." fact for the 17 same-class-referencing
+# properties phase16 had to revert, now that PropertyRedefinition.resolve() has been fixed
+# (SemGen source, same-day follow-up) to also search the property's own owner class, not just
+# its ancestors -- exactly why those 17 could not resolve before. These are legitimate,
+# mechanically-derived facts about the model (each one's opposite end genuinely does redefine
+# the other side's opposite), not guesses.
+#
+# Unlike phase16's revert, these targets are NOT necessarily empty any more: phases 18/19/20
+# (the documentation-gap fixes, run afterward) added real prose or "Subsets (per normative
+# XMI): ..." directives to several of them in the meantime. This script reads each target's
+# CURRENT content live and appends the Redefines line below whatever is already there,
+# idempotently (skips a target that already contains this exact line), rather than assuming
+# the pre-phase16 empty state still holds.
+
+REDEFINES = [
+    ("KerMLModelElement", "annotation", "Redefines (per normative XMI): KerMLModelElement.targetRelationship"),
+    ("KerMLModelElement", "textualRepresentation", "Redefines (per normative XMI): KerMLModelElement.annotatingElements"),
+    ("KerMLModelElement", "owningMembership", "Redefines (per normative XMI): KerMLModelElement.membership"),
+    ("KerMLModelElement", "membership", "Redefines (per normative XMI): KerMLModelElement.targetRelationship"),
+    ("Type", "typingByType", "Redefines (per normative XMI): Type.generalization"),
+    ("Feature", "owningEndFeatureMembership", "Redefines (per normative XMI): Feature.owningFeatureMembership"),
+    ("Feature", "associationWithEnd", "Redefines (per normative XMI): Feature.typeWithEndFeature"),
+    ("Feature", "crossSupersetting", "Redefines (per normative XMI): Feature.supersetting"),
+    ("Feature", "featuringConnector", "Redefines (per normative XMI): Feature.typeWithEndFeature"),
+    ("Feature", "ownedCrossSubsetting", "Redefines (per normative XMI): Feature.ownedSubsetting"),
+    ("Feature", "ownedReferenceSubsetting", "Redefines (per normative XMI): Feature.ownedSubsetting"),
+    ("Feature", "owningParameterMembership", "Redefines (per normative XMI): Feature.owningFeatureMembership"),
+    ("Feature", "parameteredBehavior", "Redefines (per normative XMI): Feature.typeWithDirectedFeature"),
+    ("Feature", "parameteredStep", "Redefines (per normative XMI): Feature.typeWithDirectedFeature"),
+    ("Feature", "redefining", "Redefines (per normative XMI): Feature.supersetting"),
+    ("Feature", "redefinition", "Redefines (per normative XMI): Feature.subsetting"),
+    ("Feature", "referencing", "Redefines (per normative XMI): Feature.supersetting"),
+]
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        if noteType.getName().lower() == "description":
+            return noteType
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+def find_member(owner_class, member_name):
+    for m in owner_class.getOwnedEnd():
+        if m.getName() == member_name:
+            return m
+    return None
+
+class_cache = {}
+
+def get_class(name):
+    if name not in class_cache:
+        class_cache[name] = find_class(designPkg, name)
+    return class_cache[name]
+
+to_apply = []
+already_present = []
+
+for owner_name, end_name, redefines_line in REDEFINES:
+    owner_class = get_class(owner_name)
+    if owner_class is None:
+        raise Exception("class not found: " + owner_name)
+    member = find_member(owner_class, end_name)
+    if member is None:
+        raise Exception("member not found: " + owner_name + "." + end_name)
+    current = description_content(member)
+    current = current if (current and current.strip()) else None
+    if current and redefines_line in current:
+        already_present.append((owner_name, end_name))
+        continue
+    new_content = (current + "\n" + redefines_line) if current else redefines_line
+    to_apply.append((member, owner_name, end_name, current, new_content))
+
+print "already contains this exact line (skipped, idempotent):", len(already_present)
+for o, e in already_present:
+    print "  ", o + "." + e
+print "ready to apply:", len(to_apply)
+for member, owner_name, end_name, before, after in to_apply:
+    print "  %s.%s : %r -> %r" % (owner_name, end_name, before, after)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 22: re-apply same-class Redefines notes now that resolve() handles them")
+try:
+    for member, owner_name, end_name, before, after in to_apply:
+        set_description(member, after)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes updated:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

@@ -1,0 +1,166 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Three properties in reference/design name TWO targets on their Redefines line, and the two resolve to
+# different storage slots. A property can occupy only one slot, so SemGen's preflight aborts the whole
+# generation ("Redefinition merges independent storage"). This is the correct refusal; the notes need to
+# name one slot each.
+#
+# All three declarations are faithful to the normative XMI -- each really does carry two
+# <redefinedProperty> children. What design cannot carry is the relation BETWEEN those two targets, which
+# is what makes them a single slot in KerML:
+#
+#   CrossSubsetting.crossingFeature       redefines Subsetting.owningFeature + Subsetting.subsettingFeature
+#   ReferenceSubsetting.referencingFeature  same two
+#       Subsetting.owningFeature SUBSETS Subsetting.subsettingFeature, so in KerML the two coincide for
+#       these properties. In design they are separate slots (owningFeature -> Specialization.owningType,
+#       subsettingFeature -> Relationship.source), because subsetting is not a storage instruction here.
+#       The narrower of the two is owningFeature, so that is the one kept.
+#
+#   Flow.interaction                      redefines Connector.association + Step.behavior
+#       Connector.association REDEFINES Feature.type; Step.behavior SUBSETS Feature.type. Neither subsets
+#       the other, so unlike the two above the XMI does not decide this one. Connector.association is kept
+#       because its storage is Feature.type itself, the widest slot the three share, which leaves
+#       interaction, association and type all in one slot. This one is a judgement call and is flagged as
+#       such in WIP-2026-09-27-semgen-redefinitions-status.md.
+#
+# In each case the dropped target is recorded as prose on a second line, deliberately without the literal
+# "Redefines (per normative XMI):" phrase, so the parser reads exactly one reference.
+# reference/spec is left untouched: it mirrors the XMI and is never generated from.
+
+FIXES = [
+    ("CrossSubsetting", "crossingFeature",
+     "Redefines (per normative XMI): Subsetting.owningFeature, Subsetting.subsettingFeature",
+     "Redefines (per normative XMI): Subsetting.owningFeature",
+     "The normative XMI also declares this a redefinition of Subsetting.subsettingFeature. That cannot be"
+     " expressed here: Subsetting.owningFeature subsets Subsetting.subsettingFeature, so in KerML the two"
+     " coincide for this property, but reference/design holds them in separate storage slots"
+     " (Specialization.owningType and Relationship.source respectively) and a property can occupy only one."
+     " The narrower of the two, owningFeature, is the one used."),
+
+    ("ReferenceSubsetting", "referencingFeature",
+     "Redefines (per normative XMI): Subsetting.owningFeature, Subsetting.subsettingFeature",
+     "Redefines (per normative XMI): Subsetting.owningFeature",
+     "The normative XMI also declares this a redefinition of Subsetting.subsettingFeature. That cannot be"
+     " expressed here: Subsetting.owningFeature subsets Subsetting.subsettingFeature, so in KerML the two"
+     " coincide for this property, but reference/design holds them in separate storage slots"
+     " (Specialization.owningType and Relationship.source respectively) and a property can occupy only one."
+     " The narrower of the two, owningFeature, is the one used."),
+
+    ("Flow", "interaction",
+     "Redefines (per normative XMI): Connector.association, Step.behavior",
+     "Redefines (per normative XMI): Connector.association",
+     "The normative XMI also declares this a redefinition of Step.behavior. That cannot be expressed here:"
+     " Connector.association redefines Feature.type while Step.behavior only subsets it, so the two are"
+     " separate storage slots in reference/design and a property can occupy only one. Connector.association"
+     " is used because its storage is Feature.type itself, which keeps interaction, association and type in"
+     " one slot. Neither target subsets the other in the XMI, so this choice is a modelling decision rather"
+     " than something the specification settles."),
+]
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        f = find_class(c, name, depth + 1)
+        if f:
+            return f
+    return None
+
+def description_note_type(element):
+    for nt in mmExt.findNoteTypes("", element.getMClass()):
+        if nt.getName().lower() == "description":
+            return nt
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+resolved = []
+for class_name, end_name, wrong_line, right_line, prose in FIXES:
+    cls = find_class(designPkg, class_name)
+    if cls is None:
+        raise Exception("class not found: " + class_name)
+    member = None
+    for e in cls.getOwnedEnd():
+        if e.getName() == end_name:
+            member = e
+            break
+    if member is None:
+        raise Exception("end not found: %s.%s" % (class_name, end_name))
+    current = description_content(member)
+    if not current:
+        raise Exception("no description on %s.%s" % (class_name, end_name))
+    lines = current.split("\n")
+    hits = [i for i, ln in enumerate(lines) if ln.strip() == wrong_line]
+    if len(hits) != 1:
+        raise Exception("expected exactly 1 merging line in %s.%s, found %d: %r" % (
+            class_name, end_name, len(hits), current))
+    lines[hits[0]] = right_line
+    lines.insert(hits[0] + 1, prose)
+    after = "\n".join(lines)
+    if after.count("Redefines (per normative XMI):") != 1:
+        raise Exception("result for %s.%s would still hold %d declarations: %r" % (
+            class_name, end_name, after.count("Redefines (per normative XMI):"), after))
+    resolved.append((member, class_name, end_name, current, after))
+
+print "verified, ready to split:", len(resolved)
+for member, c, e, before, after in resolved:
+    print "  %s.%s" % (c, e)
+    print "    before: %r" % before
+    print "    after : %r" % after
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 29: one storage target per Redefines line (3 notes)")
+try:
+    for member, c, e, before, after in resolved:
+        set_description(member, after)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes split:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

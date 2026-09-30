@@ -3,7 +3,7 @@ from collections import deque
 
 factory = modelingSession.getModel()
 
-# 34-case table from points-a-trancher.md section 5, cross-verified against live parent data.
+# 34-case table from WIP-2026-09-26-points-a-trancher.md section 5, cross-verified against live parent data.
 CASES = {
     "Association": {"primary": "Relationship", "secondaries": ["Classifier"]},
     "AssociationStructure": {"primary": "Association", "secondaries": ["Structure"]},

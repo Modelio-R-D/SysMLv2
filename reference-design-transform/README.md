@@ -5,12 +5,12 @@ pipeline. The initial assembly sequence builds `reference/design` from
 `reference/spec` (the UML-fidelity mirror); later scripts record targeted
 repairs and corrections, including reversals of earlier changes. The scripts
 operate on the live `sysml2` Modelio project. See
-`deck-implementation-plan/points-a-trancher.md` (points 1–6 and "Points ouverts")
+`deck-implementation-plan/WIP-2026-09-26-points-a-trancher.md` (points 1–6 and "Points ouverts")
 for the full design rationale.
 
 **Status, 2026-09-24:** the generated metamodel is not yet validated for release.
 Redefined storage and derived-accessor generation remain partially implemented.
-See [SemGen redefinition status](semgen-redefinitions-status.md) for tested
+See [SemGen redefinition status](WIP-2026-09-27-semgen-redefinitions-status.md) for tested
 behavior, known bypasses and the release gate. The 4.0.06 archive is an older
 local work-in-progress candidate, not a package of the latest source changes.
 The user handles deployment; no automatic module installation is planned.
@@ -19,7 +19,7 @@ Latest progress: the pre-mutation controller has a tested callback-reentrancy
 guard; runtime-source extraction and Java override emission helpers have been
 added. These helpers are not yet wired into generation. Runtime-source tests
 still lack a completed result, and the last full-suite result predates these
-additions. See the [evidence and integration status](semgen-redefinitions-status.md).
+additions. See the [evidence and integration status](WIP-2026-09-27-semgen-redefinitions-status.md).
 
 Run each script via ScriptServer:
 ```
@@ -96,7 +96,7 @@ to run any time (read-only).
 
 This is a chronological repair record, not a continuation of the assembly
 sequence. Dates below are included only when recorded in
-`semgen-redefinitions-status.md`; dates for scripts 15–23 were not found in the
+`WIP-2026-09-27-semgen-redefinitions-status.md`; dates for scripts 15–23 were not found in the
 workspace history. The filenames retain their legacy `phase` prefix.
 
 | Script | Date recorded | Operation |
@@ -150,7 +150,7 @@ pipeline — API findings from them are already folded into
    explicit changed defaults it cannot preserve.
 - Redefinition adapters do not yet protect inherited and inverse mutation
    paths. The typed collection prototype is tested but not wired into generated
-   accessors. See [current implementation status](semgen-redefinitions-status.md).
+   accessors. See [current implementation status](WIP-2026-09-27-semgen-redefinitions-status.md).
 - Restoring association `isDerived` suppresses stored fields/descriptors, but
    the 4.0.05 Java audit still found calls to omitted descriptor getters. Derived
    computations and complete generated-code compilation remain release blockers.

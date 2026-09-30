@@ -1,0 +1,84 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+TARGET_UUID = "5bcddd36-fdc1-440f-a204-7056409c80ad"
+
+q = deque([designPkg])
+seen = set()
+target = None
+while q:
+    el = q.popleft()
+    eid = el.getUuid()
+    if eid in seen:
+        continue
+    seen.add(eid)
+    if len(seen) > 30000:
+        break
+    if str(eid) == TARGET_UUID:
+        target = el
+    try:
+        if el.isDeleted():
+            continue
+    except:
+        pass
+    try:
+        for c in el.getCompositionChildren():
+            q.append(c)
+    except:
+        pass
+
+if target is None:
+    print "TARGET NOT FOUND in BFS"
+else:
+    print "found target, mclass:", target.getMClass().getName()
+    print "isDeleted:", target.isDeleted()
+    print "name repr:", repr(target.getName())
+    try:
+        owner = target.getCompositionOwner()
+        print "compositionOwner:", owner
+    except Exception as e:
+        print "compositionOwner error:", e
+
+# Cross-check: scan all Enumerations under designPkg, list their literals' uuids/names
+q2 = deque([designPkg])
+seen2 = set()
+enumCount = 0
+while q2:
+    el = q2.popleft()
+    eid = el.getUuid()
+    if eid in seen2:
+        continue
+    seen2.add(eid)
+    if len(seen2) > 30000:
+        break
+    try:
+        if el.isDeleted():
+            continue
+        if el.getMClass().getName() == "Enumeration":
+            enumCount += 1
+            lits = [c for c in el.getCompositionChildren() if not c.isDeleted() and c.getMClass().getName() == "EnumerationLiteral"]
+            for lit in lits:
+                if str(lit.getUuid()) == TARGET_UUID:
+                    print "MATCH found as literal of enum:", el.getName(), "qualifiedName-ish path via parent search"
+    except:
+        pass
+    try:
+        for c in el.getCompositionChildren():
+            q2.append(c)
+    except:
+        pass
+print "enum count scanned:", enumCount

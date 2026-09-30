@@ -1,0 +1,200 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Fixes a documentation gap specific to one class: phase9_copy_documentation.jy matched
+# reference/spec elements to their reference/design counterparts by an exact
+# (metaclass, owner class name, member name) key. KerML::Element was deliberately renamed to
+# KerMLModelElement in reference/design (WIP-2026-09-26-points-a-trancher.md point 1) -- a real, intentional
+# identity change, not present in spec. Because the owner's name differs, phase9's key never
+# matched for this one class or for ANY of its members (their keys also embed the owner name),
+# so KerMLModelElement -- the single most foundational class in the whole design, everything
+# else inherits from it -- silently kept zero documentation, along with every one of its
+# attributes, association ends and operations.
+#
+# Confirmed before writing this script, not assumed:
+# - reference/spec's Element DOES have real prose documentation (a full normative paragraph).
+# - Diffing all class names between reference/spec (175) and reference/design (171) found
+#   exactly one unexplained rename (Element -> KerMLModelElement); every other spec-only name
+#   is one of the five already-documented, intentional infrastructure redirects (Comment,
+#   Documentation, Dependency, MetadataDefinition, MetadataUsage), and the other design-only
+#   name (SysMLProject) is a brand-new class with no spec counterpart to copy from. This is a
+#   one-class fix, not a symptom of a wider unnoticed pattern.
+#
+# This script copies spec.Element's own Description/Summary notes onto design.KerMLModelElement,
+# and does the same for every attribute/association-end/operation that exists under the same
+# name on both sides -- exactly phase9's own copying logic, reused directly, just not blocked by
+# the owner-name mismatch this one time. Nothing is removed or overwritten: if a design target
+# somehow already has real content, phase9's own sync logic (reused here unmodified) leaves it
+# untouched via the same plain-vs-typed reconciliation it already performs elsewhere.
+
+factory = modelingSession.getModel()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+designPkg = find_child(refPkg, "design")
+if specPkg is None or designPkg is None:
+    raise Exception("reference/spec or reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+specElement = find_class(specPkg, "Element")
+designKME = find_class(designPkg, "KerMLModelElement")
+if specElement is None or designKME is None:
+    raise Exception("spec.Element or design.KerMLModelElement not found")
+
+# --- exact reuse of phase9_copy_documentation.jy's own logic, unmodified ---
+
+def notes(el):
+    result = []
+    try:
+        for child in el.getCompositionChildren():
+            if child.getMClass().getName() == "Note":
+                content = child.getContent()
+                if content and content.strip():
+                    result.append(content)
+    except:
+        pass
+    return result
+
+def note_types(element):
+    result = {}
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        name = noteType.getName().lower()
+        if name in ("description", "summary"):
+            result[name] = noteType
+    return result
+
+def typed_content(element, noteType):
+    note = element.getNote(noteType)
+    return note.getContent() if note else None
+
+def set_typed_content(element, kind, content):
+    types = note_types(element)
+    noteType = types.get(kind)
+    if noteType is None:
+        raise Exception("Missing NoteType " + kind + " for " + element.getMClass().getName())
+    element.putNoteContent(noteType, content)
+
+def remove_plain_content(element, contents, protected):
+    removed = 0
+    for child in list(element.getCompositionChildren()):
+        if child.getMClass().getName() == "Note" and child.getUuid() not in protected and child.getContent() in contents:
+            child.delete()
+            removed += 1
+    return removed
+
+def source_description(source):
+    sourceNotes = notes(source)
+    return sourceNotes[0] if sourceNotes else None
+
+def sync_typed_documentation(source, target):
+    description = source_description(source)
+    if not description:
+        return (0, 0, 0)
+    summary = source.getName()
+    sourceTypes = note_types(source)
+    targetTypes = note_types(target)
+    if "description" not in sourceTypes or "description" not in targetTypes:
+        return (0, 0, 0)
+    set_typed_content(source, "description", description)
+    sourceProtected = set([source.getNote(sourceTypes["description"]).getUuid()])
+    if "summary" in sourceTypes:
+        set_typed_content(source, "summary", summary)
+        sourceProtected.add(source.getNote(sourceTypes["summary"]).getUuid())
+    sourceRemoved = remove_plain_content(source, set([description, summary]), sourceProtected)
+    set_typed_content(target, "description", description)
+    targetProtected = set([target.getNote(targetTypes["description"]).getUuid()])
+    if "summary" in targetTypes:
+        set_typed_content(target, "summary", summary)
+        targetProtected.add(target.getNote(targetTypes["summary"]).getUuid())
+    targetRemoved = remove_plain_content(target, set([description, summary]), targetProtected)
+    typedCount = 1 + (1 if "summary" in sourceTypes else 0) + (1 if "summary" in targetTypes else 0)
+    return (typedCount, sourceRemoved + targetRemoved, 1 if "summary" in targetTypes else 0)
+
+# --- pairing: class itself, plus every member matched by name only (owner name deliberately ignored) ---
+
+pairs = [(specElement, designKME)]
+
+def by_name(items):
+    result = {}
+    for item in items:
+        result[item.getName()] = item
+    return result
+
+spec_attrs = by_name(specElement.getOwnedAttribute())
+design_attrs = by_name(designKME.getOwnedAttribute())
+for name in spec_attrs:
+    if name in design_attrs:
+        pairs.append((spec_attrs[name], design_attrs[name]))
+
+spec_ends = by_name(specElement.getOwnedEnd())
+design_ends = by_name(designKME.getOwnedEnd())
+for name in spec_ends:
+    if name in design_ends:
+        pairs.append((spec_ends[name], design_ends[name]))
+
+spec_ops = by_name(specElement.getOwnedOperation())
+design_ops = by_name(designKME.getOwnedOperation())
+for name in spec_ops:
+    if name in design_ops:
+        pairs.append((spec_ops[name], design_ops[name]))
+
+print "pairs to sync (class + matched members):", len(pairs)
+
+typedNotes = 0
+plainRemoved = 0
+summaryCount = 0
+skippedNoSourceDoc = []
+tr = modelingSession.createTransaction("Phase 18: copy Element documentation onto KerMLModelElement")
+try:
+    for source, target in pairs:
+        if not source_description(source):
+            skippedNoSourceDoc.append(source.getName())
+            continue
+        count, removed, summaryCountForElement = sync_typed_documentation(source, target)
+        typedNotes += count
+        plainRemoved += removed
+        summaryCount += summaryCountForElement
+    tr.commit()
+    print "COMMITTED OK"
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print "typed notes written:", typedNotes
+print "plain notes removed:", plainRemoved
+print "summaries written:", summaryCount
+print "pairs with no source documentation to copy (skipped, not an error):", len(skippedNoSourceDoc)
+for n in skippedNoSourceDoc:
+    print "  skipped:", n
+
+projectService.saveProject(NullProgressMonitor())
+print "isDirty after save:", projectService.isDirty()

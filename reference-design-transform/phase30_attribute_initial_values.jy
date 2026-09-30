@@ -1,0 +1,173 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# SemGen logs "Attribute <X> has no initial value." at ERROR for 40 attributes across the KerML and
+# SysML generations. Checked against the normative XMI, they fall into three groups; this script
+# handles the two that need no judgement.
+#
+# PART A -- 24 attributes whose default the XMI declares. reference/design simply does not carry it.
+#   NOTE Feature.isUnique defaults to TRUE while every other boolean here defaults to false. These
+#   are deliberately listed one by one rather than defaulted in bulk.
+#
+#   Enum values are written bare ("private"), which is what DataGenerator.getAttributeInitialValue
+#   expects: it strips an optional "<EnumName>." prefix, then emits "<EnumName>.<UPPERCASE>", so
+#   "private" on a VisibilityKind attribute becomes VisibilityKind.PRIVATE.
+#
+# PART B -- 5 attributes the XMI marks isDerived="true". They are computed, not stored, so no
+#   initial value belongs on them.
+#
+#   IMPORTANT: this will NOT silence their ERROR lines. DataGenerator's attribute loop has no
+#   isIsDerived() check, unlike every association-end path (DataGenerator:97,
+#   MetaclassLoadGenerator:106, MetaclassSmDependencyGenerator:50), so a derived attribute still
+#   gets a data field and still reports a missing initial value. This part is a fidelity fix -- the
+#   design should say what the XMI says -- and it documents why those five have no default. Giving
+#   SemGen the same guard on attributes is not safe until derived-property computation exists, or
+#   the generated getters would read a field that no longer exists.
+#
+# NOT TOUCHED -- the 11 that need a decision: Feature.direction and OccurrenceUsage.portionKind
+#   (0..1, so absence is meaningful), LiteralBoolean/Integer/Rational.value, Definition.isVariation,
+#   Usage.isVariation, and the four mandatory `kind` enums.
+#
+# reference/spec is left alone, per the convention used since phase 24.
+
+INITIAL_VALUES = [
+    # --- KerML, boolean false ---
+    ("KerMLModelElement", "isImpliedIncluded", "false"),
+    ("Relationship", "isImplied", "false"),
+    ("Import", "isRecursive", "false"),
+    ("Import", "isImportAll", "false"),
+    ("Type", "isAbstract", "false"),
+    ("Type", "isSufficient", "false"),
+    ("Feature", "isComposite", "false"),
+    ("Feature", "isConstant", "false"),
+    ("Feature", "isDerived", "false"),
+    ("Feature", "isEnd", "false"),
+    ("Feature", "isOrdered", "false"),
+    ("Feature", "isPortion", "false"),
+    ("Feature", "isVariable", "false"),
+    ("Invariant", "isNegated", "false"),
+    ("FeatureValue", "isInitial", "false"),
+    ("FeatureValue", "isDefault", "false"),
+    ("LibraryPackage", "isStandard", "false"),
+    # --- KerML, boolean TRUE (the one exception) ---
+    ("Feature", "isUnique", "true"),
+    # --- KerML, enumerations ---
+    ("Import", "visibility", "private"),
+    ("Membership", "visibility", "public"),
+    # --- SysML, boolean false ---
+    ("OccurrenceDefinition", "isIndividual", "false"),
+    ("OccurrenceUsage", "isIndividual", "false"),
+    ("StateDefinition", "isParallel", "false"),
+    ("StateUsage", "isParallel", "false"),
+]
+
+MARK_DERIVED = [
+    ("KerMLModelElement", "isLibraryElement"),
+    ("Type", "isConjugated"),
+    ("Function", "isModelLevelEvaluable"),
+    ("Expression", "isModelLevelEvaluable"),
+    ("Usage", "isReference"),
+]
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+# Collect classes by name once, so a duplicate name is caught rather than silently resolved.
+classes = {}
+def collect(pkg, depth=0):
+    if depth > 60:
+        return
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class":
+                classes.setdefault(c.getName(), []).append(c)
+        except:
+            pass
+        collect(c, depth + 1)
+collect(designPkg)
+
+def get_attribute(class_name, attr_name):
+    found = classes.get(class_name, [])
+    if len(found) != 1:
+        raise Exception("class %s is not unique in reference/design (%d found)" % (class_name, len(found)))
+    for a in found[0].getOwnedAttribute():
+        if a.getName() == attr_name:
+            return a
+    raise Exception("attribute not found: %s.%s" % (class_name, attr_name))
+
+values_todo = []
+for class_name, attr_name, value in INITIAL_VALUES:
+    attr = get_attribute(class_name, attr_name)
+    current = attr.getValue()
+    if current is not None and current.strip() != "":
+        raise Exception("%s.%s already has a value %r -- refusing to overwrite" % (
+            class_name, attr_name, current))
+    t = attr.getType()
+    values_todo.append((attr, class_name, attr_name, value, t.getName() if t else None))
+
+derived_todo = []
+for class_name, attr_name in MARK_DERIVED:
+    attr = get_attribute(class_name, attr_name)
+    if attr.isIsDerived():
+        raise Exception("%s.%s is already derived -- nothing to do" % (class_name, attr_name))
+    derived_todo.append((attr, class_name, attr_name))
+
+print "PART A -- initial values to set:", len(values_todo)
+for attr, cn, an, value, tname in values_todo:
+    print "  %-28s.%-22s = %-10s (type %s)" % (cn, an, value, tname)
+print ""
+print "PART B -- to mark derived:", len(derived_todo)
+for attr, cn, an in derived_todo:
+    print "  %-28s.%s" % (cn, an)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 30: XMI-declared initial values (24) and derived marks (5)")
+try:
+    for attr, cn, an, value, tname in values_todo:
+        attr.setValue(value)
+        changed += 1
+    for attr, cn, an in derived_todo:
+        attr.setIsDerived(True)
+        changed += 1
+    tr.commit()
+    print ""
+    print "COMMITTED OK, attributes changed:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print ""
+print "verification, re-read from the model:"
+for class_name, attr_name, value in INITIAL_VALUES:
+    a = get_attribute(class_name, attr_name)
+    ok = "OK " if a.getValue() == value else "BAD"
+    print "  %s %-28s.%-22s = %r" % (ok, class_name, attr_name, a.getValue())
+for class_name, attr_name in MARK_DERIVED:
+    a = get_attribute(class_name, attr_name)
+    ok = "OK " if a.isIsDerived() else "BAD"
+    print "  %s %-28s.%-22s derived=%s value=%r" % (
+        ok, class_name, attr_name, a.isIsDerived(), a.getValue())
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print ""
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

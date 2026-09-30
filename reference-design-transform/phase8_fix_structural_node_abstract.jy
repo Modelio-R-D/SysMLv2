@@ -60,9 +60,9 @@ print "targets found:", [t.getName() for t in targets]
 if len(targets) != len(TARGET_NAMES):
     print "FAIL CLOSED: expected", len(TARGET_NAMES), "found", len(targets)
 else:
+    removed = 0
     tr = modelingSession.createTransaction("Fix: unset Semantic.structural.node on abstract design classes")
     try:
-        removed = 0
         for cls in targets:
             if not cls.isIsAbstract():
                 raise Exception("safety check failed: " + cls.getName() + " is not abstract")
@@ -80,5 +80,8 @@ else:
         print "ROLLED BACK:", e
         raise
 
-    projectService.saveProject(NullProgressMonitor())
-    print "isDirty after save:", projectService.isDirty()
+    if removed > 0:
+        projectService.saveProject(NullProgressMonitor())
+        print "isDirty after save:", projectService.isDirty()
+    else:
+        print "NO-OP: project save skipped"

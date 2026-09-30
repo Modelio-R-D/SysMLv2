@@ -1,0 +1,149 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# The 9 attributes left after phase 30 that genuinely needed a chosen value. Unlike phase 30's 24,
+# the normative XMI declares NO default for any of these, so every value here is a deliberate
+# decision taken to get compilable generated code, not a fact read out of the specification.
+#
+#   The four `kind` enums have no neutral literal -- each is a real discriminator -- so the choice
+#   is the base case of each set. Three are the first-declared literal; RequirementConstraintKind
+#   takes `requirement` rather than the first-declared `assumption`, because a
+#   RequirementConstraintMembership is normally a requirement and an assumption is the special case.
+#
+#   isVariation is false: nothing is a variation unless declared one.
+#   Literal*.value takes the zero of its type. The value IS the literal's content, so any default
+#   is arbitrary; zero is the conventional choice and is at least type-correct.
+#
+# NOT TOUCHED, deliberately: Feature.direction (FeatureDirectionKind) and OccurrenceUsage.portionKind
+#   (PortionKind) are both 0..1. Absence is meaningful there -- a Feature with no direction is not a
+#   Feature with direction `in` -- so giving them a default would be wrong. SemGen still logs an
+#   ERROR for them; that ERROR is a false alarm for optional attributes.
+#
+# reference/spec is left alone, per the convention used since phase 24.
+
+INITIAL_VALUES = [
+    ("TriggerInvocationExpression", "kind", "when"),
+    ("StateSubactionMembership", "kind", "entry"),
+    ("TransitionFeatureMembership", "kind", "trigger"),
+    ("RequirementConstraintMembership", "kind", "requirement"),
+    ("Definition", "isVariation", "false"),
+    ("Usage", "isVariation", "false"),
+    ("LiteralBoolean", "value", "false"),
+    ("LiteralInteger", "value", "0"),
+    ("LiteralRational", "value", "0.0"),
+]
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+classes = {}
+def collect(pkg, depth=0):
+    if depth > 60:
+        return
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class":
+                classes.setdefault(c.getName(), []).append(c)
+        except:
+            pass
+        collect(c, depth + 1)
+collect(designPkg)
+
+def get_attribute(class_name, attr_name):
+    found = classes.get(class_name, [])
+    if len(found) != 1:
+        raise Exception("class %s is not unique in reference/design (%d found)" % (class_name, len(found)))
+    for a in found[0].getOwnedAttribute():
+        if a.getName() == attr_name:
+            return a
+    raise Exception("attribute not found: %s.%s" % (class_name, attr_name))
+
+BOOLEANS = ("true", "false")
+
+todo = []
+for class_name, attr_name, value in INITIAL_VALUES:
+    attr = get_attribute(class_name, attr_name)
+    current = attr.getValue()
+    if current is not None and current.strip() != "":
+        raise Exception("%s.%s already has a value %r -- refusing to overwrite" % (
+            class_name, attr_name, current))
+    t = attr.getType()
+    if t is None:
+        raise Exception("%s.%s has no type" % (class_name, attr_name))
+    tname = t.getName()
+    kind = t.getMClass().getName()
+
+    # The value must actually be valid for the attribute's own type, or the generated Java will not
+    # compile -- an enum literal that does not exist, or a boolean word in an integer field.
+    if kind == "Enumeration":
+        literals = [l.getName() for l in t.getValue()]
+        if value not in literals:
+            raise Exception("%s.%s: %r is not a literal of %s %s" % (
+                class_name, attr_name, value, tname, literals))
+    elif tname == "boolean":
+        if value not in BOOLEANS:
+            raise Exception("%s.%s: %r is not a boolean" % (class_name, attr_name, value))
+    elif tname == "integer":
+        int(value)
+    elif tname == "double":
+        float(value)
+    else:
+        raise Exception("%s.%s: unexpected type %s (%s) -- refusing to guess a value" % (
+            class_name, attr_name, tname, kind))
+
+    todo.append((attr, class_name, attr_name, value, tname))
+
+print "verified, ready to set:", len(todo)
+for attr, cn, an, value, tname in todo:
+    print "  %-32s.%-14s = %-12s (type %s)" % (cn, an, value, tname)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 31: chosen initial values for the 9 undeclared attributes")
+try:
+    for attr, cn, an, value, tname in todo:
+        attr.setValue(value)
+        changed += 1
+    tr.commit()
+    print ""
+    print "COMMITTED OK, attributes changed:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print ""
+print "verification, re-read from the model:"
+for class_name, attr_name, value in INITIAL_VALUES:
+    a = get_attribute(class_name, attr_name)
+    ok = "OK " if a.getValue() == value else "BAD"
+    print "  %s %-32s.%-14s = %r" % (ok, class_name, attr_name, a.getValue())
+
+print ""
+print "left empty on purpose (0..1, absence is meaningful):"
+for class_name, attr_name in [("Feature", "direction"), ("OccurrenceUsage", "portionKind")]:
+    a = get_attribute(class_name, attr_name)
+    print "  %-32s.%-14s value=%r mult=%s..%s" % (
+        class_name, attr_name, a.getValue(), a.getMultiplicityMin(), a.getMultiplicityMax())
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print ""
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

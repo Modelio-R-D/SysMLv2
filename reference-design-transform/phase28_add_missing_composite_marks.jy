@@ -1,0 +1,123 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Two association ends in reference/design redefine a COMPOSITE storage property while being
+# marked KindIsAssociation themselves. A redefinition shares the storage slot, so the redefining
+# end must carry the same aggregation as the slot it writes into -- otherwise the generated
+# accessor would put the target outside the containment tree its storage maintains.
+#
+#     VariantMembership.ownedVariantUsage    redefines OwningMembership.ownedMemberElement (composite)
+#     ConjugatedPortDefinition.ownedPortConjugator  redefines Type.ownedConjugator          (composite)
+#
+# Both are 'owned*' properties, which are composite everywhere else in the design; both redefine a
+# composite property per the normative XMI (verified: <redefinedProperty> present on each);
+# and NEITHER end of their association is composite today, so marking one end composite is legal
+# (Modelio allows at most one composite end per association).
+#
+# This is the same class of omission as the 4 missing composite marks found in the earlier
+# composition review, not a new modelling decision.
+#
+# The third aggregation case, OwningMembership.ownedMemberElement (composite) redefining
+# Membership.memberElement (reference), is NOT touched here: there the composite mark is correct
+# on both ends as they stand, and reconciling them is a genuine modelling decision.
+
+TARGETS = [
+    ("VariantMembership", "ownedVariantUsage"),
+    ("ConjugatedPortDefinition", "ownedPortConjugator"),
+]
+
+# Source of the KindIsComposition enum constant, read from an end that already has it,
+# so we do not have to guess the enum's package.
+COMPOSITE_SOURCE = ("Type", "ownedConjugator")
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        f = find_class(c, name, depth + 1)
+        if f:
+            return f
+    return None
+
+def get_end(class_name, end_name):
+    cls = find_class(designPkg, class_name)
+    if cls is None:
+        raise Exception("class not found: " + class_name)
+    for e in cls.getOwnedEnd():
+        if e.getName() == end_name:
+            return e
+    raise Exception("end not found: %s.%s" % (class_name, end_name))
+
+composite_kind = get_end(COMPOSITE_SOURCE[0], COMPOSITE_SOURCE[1]).getAggregation()
+if str(composite_kind) != "KindIsComposition":
+    raise Exception("reference end is not composite, got: " + str(composite_kind))
+print "composite enum constant read from %s.%s: %s" % (
+    COMPOSITE_SOURCE[0], COMPOSITE_SOURCE[1], composite_kind)
+
+resolved = []
+for class_name, end_name in TARGETS:
+    end = get_end(class_name, end_name)
+    if str(end.getAggregation()) != "KindIsAssociation":
+        raise Exception("%s.%s is not KindIsAssociation, got %s" % (
+            class_name, end_name, end.getAggregation()))
+    opp = end.getOpposite()
+    if opp is None:
+        raise Exception("%s.%s has no opposite" % (class_name, end_name))
+    if str(opp.getAggregation()) != "KindIsAssociation":
+        raise Exception("opposite of %s.%s is already composite (%s) -- refusing" % (
+            class_name, end_name, opp.getAggregation()))
+    resolved.append((end, class_name, end_name, opp))
+
+print "verified, ready to mark composite:", len(resolved)
+for end, cn, en, opp in resolved:
+    print "  %s.%s (target %s), opposite %s stays %s" % (
+        cn, en, end.getTarget().getName() if end.getTarget() else "?",
+        opp.getName(), opp.getAggregation())
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 28: composite marks on 2 ends redefining composite storage")
+try:
+    for end, cn, en, opp in resolved:
+        end.setAggregation(composite_kind)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, ends marked composite:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+for cn, en in TARGETS:
+    e = get_end(cn, en)
+    print "after: %s.%s agg=%s  opposite agg=%s" % (
+        cn, en, e.getAggregation(), e.getOpposite().getAggregation())
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

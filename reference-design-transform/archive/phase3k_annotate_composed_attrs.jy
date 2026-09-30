@@ -3,7 +3,7 @@ from collections import deque
 
 factory = modelingSession.getModel()
 
-# case number -> (primary class, secondary class), matching points-a-trancher.md point 5's table
+# case number -> (primary class, secondary class), matching WIP-2026-09-26-points-a-trancher.md point 5's table
 CASE_NUMBERS = {
     ("Association", "Classifier"): 1,
     ("AssociationStructure", "Structure"): 2,
@@ -108,7 +108,7 @@ try:
             continue
         note = factory.createNote()
         note.setContent(
-            "Axe secondaire (cas %d, points-a-trancher.md point 5) : cette relation "
+            "Axe secondaire (cas %d, WIP-2026-09-26-points-a-trancher.md point 5) : cette relation "
             "n'existe pas dans reference/spec. Ajoutee lors de la transformation "
             "reference/design pour porter l'axe delegue %s (implements %s a la main "
             "dans le XImpl.java genere)." % (caseNum, secName, secName)

@@ -9,7 +9,7 @@ from collections import deque
 
 factory = modelingSession.getModel()
 
-# 34-case table from points-a-trancher.md point 5, cross-verified against live parent data.
+# 34-case table from WIP-2026-09-26-points-a-trancher.md point 5, cross-verified against live parent data.
 CASES = {
     "Association": {"primary": "Relationship", "secondaries": ["Classifier"]},
     "AssociationStructure": {"primary": "Association", "secondaries": ["Structure"]},
@@ -49,7 +49,7 @@ CASES = {
 EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
 ROOT_CLASS = "Element"  # graft point, handled in Phase 6 - skipped here
 
-CASE_NUMBERS = {  # (primary, secondary) -> case # per points-a-trancher.md point 5
+CASE_NUMBERS = {  # (primary, secondary) -> case # per WIP-2026-09-26-points-a-trancher.md point 5
     ("Association", "Classifier"): 1, ("AssociationStructure", "Structure"): 2,
     ("Connector", "Relationship"): 3, ("Flow", "Step"): 4, ("Interaction", "Association"): 5,
     ("MetadataFeature", "AnnotatingElement"): 6, ("SuccessionFlow", "Succession"): 7,

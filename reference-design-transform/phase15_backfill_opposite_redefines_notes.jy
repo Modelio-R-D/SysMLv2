@@ -1,0 +1,194 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+import re
+
+# Backfills the missing half of the "Redefines (per normative XMI): ..." documentation
+# convention on AssociationEnd notes: today, only the "forward" end of a redefining pair
+# (e.g. Specialization.general -> Relationship.target) carries this note. Its real opposite
+# end (e.g. Type.generalization) does NOT separately carry a note saying it redefines
+# Relationship.target's own opposite (KerMLModelElement.targetRelationship) -- even though
+# that fact is a direct, mechanical consequence of the forward note plus the model's own
+# association structure, not a guess. This script adds ONLY that missing reciprocal note,
+# and only where it is genuinely absent -- it never removes or overwrites existing content.
+
+EXPECTED_DESIGN_ENDS = 556
+
+PATTERN = re.compile(r"Redefines \(per normative XMI\):\s*([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)")
+
+factory = modelingSession.getModel()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def bfs(root, mclass, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    out = []
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        if len(seen) > max_nodes:
+            break
+        try:
+            if el.getMClass().getName() == mclass:
+                out.append(el)
+        except:
+            pass
+        try:
+            for child in el.getCompositionChildren():
+                q.append(child)
+        except:
+            pass
+    return out
+
+def description_note_type(element):
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        if noteType.getName().lower() == "description":
+            return noteType
+    return None
+
+def description_content(element):
+    noteType = description_note_type(element)
+    if noteType is None:
+        return None
+    note = element.getNote(noteType)
+    return note.getContent() if note else None
+
+def append_description(element, extra_line):
+    noteType = description_note_type(element)
+    if noteType is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    existing = description_content(element)
+    new_content = (existing + "\n" + extra_line) if existing else extra_line
+    element.putNoteContent(noteType, new_content)
+
+def resolve_named_parent(owner, class_name, member_name):
+    pending = list(owner.getParent())
+    visited = set()
+    while pending:
+        g = pending.pop(0)
+        st = g.getSuperType()
+        if st is None:
+            continue
+        key = st.getUuid()
+        if key in visited:
+            continue
+        visited.add(key)
+        try:
+            if st.getName() == class_name:
+                for m in st.getOwnedEnd():
+                    if m.getName() == member_name:
+                        return m
+        except:
+            pass
+        try:
+            pending.extend(list(st.getParent()))
+        except:
+            pass
+    return None
+
+def already_has_redefines_note(element):
+    content = description_content(element)
+    return bool(content) and PATTERN.search(content) is not None
+
+design_ends = bfs(designPkg, "AssociationEnd")
+if len(design_ends) != EXPECTED_DESIGN_ENDS:
+    raise Exception("expected " + str(EXPECTED_DESIGN_ENDS) + " design AssociationEnds, found " + str(len(design_ends)))
+
+planned = []       # (opposite_end, new_line, owner_name, end_name, target_owner_name, target_name)
+skipped_unresolved = []
+skipped_already_annotated = []
+skipped_no_opposite = []
+
+for end in design_ends:
+    content = description_content(end)
+    if not content:
+        continue
+    m = PATTERN.search(content)
+    if not m:
+        continue
+    class_name, member_name = m.group(1), m.group(2)
+    owner = end.getCompositionOwner()
+    storage = resolve_named_parent(owner, class_name, member_name)
+    if storage is None:
+        skipped_unresolved.append("%s.%s -> %s.%s" % (owner.getName(), end.getName(), class_name, member_name))
+        continue
+    if storage.getUuid() == end.getUuid():
+        continue
+
+    end_opposite = end.getOpposite()
+    storage_opposite = storage.getOpposite()
+    if end_opposite is None or storage_opposite is None:
+        skipped_no_opposite.append("%s.%s" % (owner.getName(), end.getName()))
+        continue
+
+    if already_has_redefines_note(end_opposite):
+        skipped_already_annotated.append("%s.%s" % (end_opposite.getCompositionOwner().getName(), end_opposite.getName()))
+        continue
+
+    target_owner = storage_opposite.getCompositionOwner()
+    new_line = "Redefines (per normative XMI): %s.%s" % (target_owner.getName(), storage_opposite.getName())
+    planned.append((end_opposite, new_line, owner.getName(), end.getName(), target_owner.getName(), storage_opposite.getName()))
+
+print "design AssociationEnds scanned:", len(design_ends)
+print "planned additions:", len(planned)
+print "skipped (unresolved parent reference):", len(skipped_unresolved)
+print "skipped (no opposite on one side):", len(skipped_no_opposite)
+print "skipped (opposite already annotated):", len(skipped_already_annotated)
+print ""
+print "--- PLANNED ADDITIONS ---"
+for opposite_end, new_line, owner_name, end_name, target_owner_name, target_name in planned:
+    print "  %s.%s (opposite of %s.%s) <- \"%s\"" % (
+        opposite_end.getCompositionOwner().getName(), opposite_end.getName(), owner_name, end_name, new_line)
+
+# De-duplicate: two different forward ends could both resolve to the same opposite end
+# (should not happen given the model's structure, but guard against writing the same
+# note twice in one transaction if it ever does).
+seen_targets = set()
+to_apply = []
+for opposite_end, new_line, owner_name, end_name, target_owner_name, target_name in planned:
+    key = opposite_end.getUuid()
+    if key in seen_targets:
+        continue
+    seen_targets.add(key)
+    to_apply.append((opposite_end, new_line))
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 15: backfill opposite Redefines notes")
+try:
+    for opposite_end, new_line in to_apply:
+        append_description(opposite_end, new_line)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes added:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

@@ -49,6 +49,41 @@ designCounts, dv = bfs_count(designPkg)
 print "spec visited:", sv, "design visited:", dv
 print ""
 
+def find_blank_literals(root, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    blanks = []
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        if len(seen) > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            if el.getMClass().getName() == "EnumerationLiteral" and (el.getName() is None or el.getName().strip() == ""):
+                owner = el.getCompositionOwner()
+                blanks.append((owner.getName() if owner else "<orphan>", str(el.getUuid())))
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return blanks
+
+specBlanks = find_blank_literals(specPkg)
+designBlanks = find_blank_literals(designPkg)
+print "blank enumeration literals in spec:", specBlanks
+print "blank enumeration literals in design:", designBlanks
+if specBlanks or designBlanks:
+    raise Exception("blank EnumerationLiteral found; generation must not run")
+print ""
+
 EXPECTED_DELTA = {}
 
 print "%-18s %8s %8s" % ("MClass", "spec", "design")

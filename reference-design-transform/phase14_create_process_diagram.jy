@@ -1,0 +1,84 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+factory = modelingSession.getModel()
+diagramService = Modelio.getInstance().getDiagramService()
+
+def find_child(element, name):
+    if element is None:
+        return None
+    for child in element.getCompositionChildren():
+        if child.getName() == name:
+            return child
+    return None
+
+roots = [root for root in modelingSession.getModel().getModelRoots() if root.getName() == "sysml2"]
+if len(roots) != 1:
+    raise Exception("expected one sysml2 root, found " + str(len(roots)))
+
+root = roots[0]
+pkg_root = find_child(root, "modelio.sysml")
+if pkg_root is None:
+    raise Exception("modelio.sysml package not found")
+
+pkg = None
+for child in pkg_root.getCompositionChildren():
+    if child.getName() == "SemGen repair process":
+        pkg = child
+        break
+
+phase_names = [
+    "phase1_copy_skeleton",
+    "phase2_copy_members",
+    "phase3_generalizations",
+    "phase4_associations",
+    "phase5_semgen_stereotypes",
+    "phase6_graft_points",
+    "phase7_final_verification",
+    "phase8_fix_abstract_nodes",
+    "phase9_copy_documentation",
+    "phase10_remove_duplicates",
+    "phase11_normalize_nodes",
+    "phase12_restore_derived_ends",
+    "phase13_remove_non_spec_artefacts",
+]
+
+transaction = modelingSession.createTransaction("Create SemGen repair process diagram")
+try:
+    if pkg is None:
+        pkg = factory.createPackage("SemGen repair process", pkg_root)
+
+    classes = {}
+    for name in phase_names:
+        cls = factory.createClass(name, pkg)
+        classes[name] = cls
+
+    # Create dependency chain between phases
+    for index in range(len(phase_names) - 1):
+        src = classes[phase_names[index]]
+        tgt = classes[phase_names[index + 1]]
+        dep = factory.createDependency()
+        dep.setImpacted(src)
+        dep.setDependsOn(tgt)
+
+    diagram = factory.createStaticDiagram("SemGen repair process", pkg, None)
+    handle = diagramService.getDiagramHandle(diagram)
+    for cls in classes.values():
+        handle.unmask(cls, 0, 0)
+
+    for dep in pkg.getOwnedElement():
+        try:
+            if dep.getMClass().getName() == "Dependency":
+                handle.unmask(dep, 0, 0)
+        except:
+            pass
+
+    handle.save()
+    transaction.commit()
+    projectService.saveProject(NullProgressMonitor())
+    print "Created diagram:", diagram.getName()
+    print "Package:", pkg.getName()
+    print "isDirty after save:", projectService.isDirty()
+except Exception, error:
+    transaction.rollback()
+    print "ROLLED BACK:", error
+    raise

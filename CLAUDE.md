@@ -6,7 +6,16 @@ This workspace contains SysML v2 / KerML research and transformation work, plus 
 
 Root-owned project material:
 
-- `deck-implementation-plan/` — design decisions, implementation notes, and slide-deck bundles. Keep each deck's Markdown source and rendered exports together in its existing subfolder.
+- `deck-implementation-plan/` — design decisions, implementation notes, and five dated slide decks. Keep each deck's Markdown source and rendered exports together in its existing subfolder. Cover status is explicit: `WIP` for active drafts, `ARCHIVE HISTORIQUE` for superseded snapshots.
+
+	| Deck source | Date shown on cover |
+	|---|---|
+	| `WIP-2026-09-27-greffe-sysml-kerml/slides.md` | 2026-09-27 |
+	| `ARCHIVE-HISTORIQUE-2026-09-11-heritage-multiple/slides.md` | 2026-09-11 |
+	| `ARCHIVE-HISTORIQUE-2026-09-22-stockage-api/slides.md` | 2026-09-22 |
+	| `ARCHIVE-HISTORIQUE-2026-09-23-revue-cedric/slides.md` | 2026-09-23 |
+	| `WIP-2026-09-27-redefines-xmi/slides.md` | 2026-09-27 (WIP date; XMI edition is 2025-02-01) |
+- Deck status is encoded in each deck folder name: `WIP` for active drafts and `ARCHIVE-HISTORIQUE` for superseded snapshots.
 - `docs/` — consolidated KerML/SysML metamodel reference.
 - `icons-study/` — icon inventory and SysML/UML mapping research.
 - `specs/` — normative OMG XMI and text snapshots, plus examples. Treat these as source material; do not regenerate or overwrite them from `reference/design`.

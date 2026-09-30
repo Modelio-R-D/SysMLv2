@@ -1,0 +1,77 @@
+# Check Cedric corrections before generation
+
+# 1. Abstract classes: structural.node should NOT be checked
+abstract_classes = ['KerMLModelElement', 'Relationship', 'ConnectorAsUsage', 'ControlNode', 
+                   'LoopActionUsage', 'Expose', 'Import', 'InstantiationExpression']
+
+print("## 1. Check structural.node on abstract classes")
+structural_node_issues = []
+for className in abstract_classes:
+    cls = design.findElementByName('Standard.Class', className)
+    if cls:
+        is_abstract = cls.isIsAbstract()
+        has_structural_node = False
+        try:
+            tags = cls.getTag('SemGen', 'Semantic.structural.node')
+            if tags:
+                has_structural_node = True
+        except:
+            pass
+        status = "FAIL" if (is_abstract and has_structural_node) else "OK"
+        print("  %s: abstract=%s, structural.node=%s [%s]" % (className, is_abstract, has_structural_node, status))
+        if is_abstract and has_structural_node:
+            structural_node_issues.append(className)
+
+# 2. KerMLModelElement: name and elementId should NOT exist
+print("\n## 2. KerMLModelElement properties")
+kmle_issues = []
+kmle = design.findElementByName('Standard.Class', 'KerMLModelElement')
+if kmle:
+    attrs = kmle.getOwnedAttribute()
+    attr_names = [a.getName() for a in attrs]
+    print("  Attributes: %s" % attr_names)
+    has_name = 'name' in attr_names
+    has_elementId = 'elementId' in attr_names
+    print("  Has 'name': %s [%s]" % (has_name, "FAIL" if has_name else "OK"))
+    print("  Has 'elementId': %s [%s]" % (has_elementId, "FAIL" if has_elementId else "OK"))
+    if has_name or has_elementId:
+        kmle_issues.append("KerMLModelElement has unwanted properties")
+
+# 3. Check composed associations for multiple inheritance
+print("\n## 3. Composed associations (multiple inheritance)")
+multi_parent_checks = [
+    ('Association', 'classifier', 'Classifier'),
+    ('AttributeDefinition', 'dataType', 'DataType'),
+    ('ActionUsage', 'step', 'Step'),
+]
+composition_issues = []
+for parent_class, end_name, target_type in multi_parent_checks:
+    cls = design.findElementByName('Standard.Class', parent_class)
+    if cls:
+        found = False
+        try:
+            attrs = cls.getOwnedAttribute()
+            for attr in attrs:
+                if attr.getName() == end_name:
+                    is_composite = attr.getAggregation() == 'AggregationKind.COMPOSITE'
+                    print("  %s.%s: found, composite=%s [%s]" % (parent_class, end_name, is_composite, "OK" if is_composite else "WARN"))
+                    found = True
+                    if not is_composite:
+                        composition_issues.append("%s.%s not composite" % (parent_class, end_name))
+                    break
+        except Exception as e:
+            print("  %s.%s: ERROR %s" % (parent_class, end_name, str(e)))
+        if not found:
+            print("  %s.%s: NOT FOUND" % (parent_class, end_name))
+
+# Summary
+print("\n## Summary: Cedric corrections")
+total_issues = len(structural_node_issues) + len(kmle_issues) + len(composition_issues)
+print("  structural.node issues: %d" % len(structural_node_issues))
+print("  KerMLModelElement issues: %d" % len(kmle_issues))
+print("  Composition issues: %d" % len(composition_issues))
+print("  TOTAL: %d" % total_issues)
+if total_issues == 0:
+    print("  ALL CEDRIC POINTS RESOLVED")
+else:
+    print("  SOME POINTS NEED FIXING")

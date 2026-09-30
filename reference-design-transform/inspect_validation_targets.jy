@@ -1,0 +1,44 @@
+from collections import deque
+
+def child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+root = [r for r in modelingSession.getModel().getModelRoots() if r.getName() == "sysml2"][0]
+pkg = child(child(root, "modelio.sysml"), "reference")
+design = child(pkg, "design")
+targetNames = set(["ConstraintUsage", "FeatureReferenceExpression", "ConstructorExpression", "InvocationExpression", "TriggerInvocationExpression", "OperatorExpression", "LiteralExpression", "MetadataAccessExpression", "NullExpression", "EnumerationDefinition", "Feature", "NamespaceImport", "Relationship", "MembershipImport", "OwningMembership", "ReturnParameterMembership", "ConnectionDefinition", "Type", "Namespace", "ControlNode", "LoopActionUsage", "Expose", "Annotation", "InstantiationExpression", "EnumerationDefinition", "ConnectionUsage", "ConnectorAsUsage", "Package", "LibraryPackage", "AnnotatingElement", "Expression"])
+q = deque([design])
+seen = set()
+found = {}
+while q and len(seen) < 3000 and len(found) < len(targetNames):
+    el = q.popleft()
+    if el.getUuid() in seen:
+        continue
+    seen.add(el.getUuid())
+    try:
+        if el.getMClass().getName() == "Class" and el.getName() in targetNames:
+            found[el.getName()] = el
+    except:
+        pass
+    try:
+        for c in el.getCompositionChildren():
+            q.append(c)
+    except:
+        pass
+print "visited:", len(seen), "found:", len(found), "of", len(targetNames)
+for name in sorted(found.keys()):
+    cls = found[name]
+    parents = []
+    for gen in cls.getParent():
+        sup = gen.getSuperType()
+        if sup:
+            parents.append(sup.getName())
+    attrs = [a.getName() for a in cls.getOwnedAttribute()]
+    ops = [o.getName() for o in cls.getOwnedOperation()]
+    print "CLASS", name
+    print "  abstract:", cls.isIsAbstract(), "parents:", sorted(parents)
+    print "  own attrs:", sorted(attrs)
+    print "  own ops:", sorted(ops)

@@ -1,0 +1,92 @@
+from collections import deque
+
+factory = modelingSession.getModel()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+sysmlSpecComp = find_child(find_child(refPkg, "spec"), "SysML")
+moduleName = sysmlSpecComp.getExtension()[0].getModule().getName()
+
+def bfs_collect_list(root, mclasses, max_nodes=20000):
+    q = deque([root])
+    seen = set()
+    out = []
+    visited = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        visited += 1
+        if visited > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            mcls = el.getMClass().getName()
+            if mcls in mclasses:
+                out.append(el)
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return out, visited
+
+designClasses, dv = bfs_collect_list(designPkg, set(["Class"]))
+print "total classes:", len(designClasses)
+
+def has_node_tag(cls):
+    for t in cls.getTag():
+        defn = t.getDefinition()
+        if defn and defn.getName() == "Semantic.structural.node":
+            return True
+    return False
+
+semantic_flagged = []
+semantic_unflagged = []
+linkmeta_flagged = []
+linkmeta_unflagged = []
+other = []
+
+for cls in designClasses:
+    isSem = cls.isStereotyped(moduleName, "Semantic")
+    isLink = cls.isStereotyped(moduleName, "SemanticLinkMetaclass")
+    flagged = has_node_tag(cls)
+    if isSem:
+        (semantic_flagged if flagged else semantic_unflagged).append(cls.getName())
+    elif isLink:
+        (linkmeta_flagged if flagged else linkmeta_unflagged).append(cls.getName())
+    else:
+        other.append(cls.getName())
+
+print "Semantic stereotype: flagged=%d unflagged=%d" % (len(semantic_flagged), len(semantic_unflagged))
+print "SemanticLinkMetaclass stereotype: flagged=%d unflagged=%d" % (len(linkmeta_flagged), len(linkmeta_unflagged))
+print "other/no stereotype:", other
+print ""
+print "=== SemanticLinkMetaclass classes flagged structural.node (candidates to review) ==="
+for n in sorted(linkmeta_flagged):
+    print " -", n
+print ""
+print "=== Semantic classes unflagged (already not a node) ==="
+for n in sorted(semantic_unflagged):
+    print " -", n
+print ""
+print "=== Semantic classes flagged (all current 'node' candidates) ==="
+for n in sorted(semantic_flagged):
+    print " -", n

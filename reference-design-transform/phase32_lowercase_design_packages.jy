@@ -1,0 +1,131 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Lowercase the first letter of every Package under reference/design, so the generated Java package
+# names follow Java convention: org.modelio.sysml.metamodel.kerml.impl.Root.Elements becomes
+# ...kerml.impl.root.elements.
+#
+# SCOPE -- packages only, NOT the two Components.
+#   'KerML' and 'SysML' are Components, not Packages. They name the metamodel being generated (the
+#   generation log reads "generating 'sysml2.modelio.sysml.reference.design.KerML'", and the component
+#   name is what LOG.archiveLog labels the archived log with), and 'kerML'/'sysML' would be an odd
+#   name for either. They are left alone.
+#
+# Only the FIRST letter changes. 'DefinitionAndUsage' becomes 'definitionAndUsage', not
+# 'definitionandusage': the request was that names start with lowercase, and flattening the interior
+# camel case would make several of them hard to read.
+#
+# AFTER THIS, THE PREVIOUS GENERATED OUTPUT MUST BE CLEARED before regenerating. Renaming a package
+# changes where its generated classes land, so the old ones become orphans that no rerun cleans --
+# this is the one case where SemGen's per-class doClean is not enough. (The user reports the cleanup
+# is already done, so a regeneration straight after this script is safe.)
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+targets = []
+skipped = []
+
+def walk(el, path, depth=0):
+    if depth > 40:
+        return
+    for c in el.getCompositionChildren():
+        try:
+            mc = c.getMClass().getName()
+        except:
+            continue
+        if mc not in ("Package", "Component"):
+            continue
+        name = c.getName()
+        childPath = path + "/" + name
+        if mc == "Component":
+            skipped.append((mc, childPath, name))
+        elif name and name[0].isupper():
+            targets.append((c, childPath, name, name[0].lower() + name[1:]))
+        else:
+            skipped.append((mc, childPath, name))
+        walk(c, childPath, depth + 1)
+
+walk(designPkg, "", 0)
+
+# A rename must not collide with a sibling that already has the target name.
+for element, path, old, new in targets:
+    owner = element.getCompositionOwner()
+    for sibling in owner.getCompositionChildren():
+        if sibling.equals(element):
+            continue
+        try:
+            if sibling.getMClass().getName() in ("Package", "Component") and sibling.getName() == new:
+                raise Exception("renaming %s to %r would collide with an existing sibling" % (path, new))
+        except AttributeError:
+            pass
+
+print "packages to rename:", len(targets)
+for element, path, old, new in targets:
+    print "  %-58s %-22s -> %s" % (path, old, new)
+print ""
+print "left alone:", len(skipped)
+for mc, path, name in skipped:
+    print "  %-12s %s" % (mc, path)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 32: lowercase package names in reference/design")
+try:
+    for element, path, old, new in targets:
+        element.setName(new)
+        changed += 1
+    tr.commit()
+    print ""
+    print "COMMITTED OK, packages renamed:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+print ""
+print "verification, re-read from the model:"
+remaining = []
+def verify(el, path, depth=0):
+    if depth > 40:
+        return
+    for c in el.getCompositionChildren():
+        try:
+            mc = c.getMClass().getName()
+        except:
+            continue
+        if mc not in ("Package", "Component"):
+            continue
+        childPath = path + "/" + c.getName()
+        if mc == "Package" and c.getName() and c.getName()[0].isupper():
+            remaining.append(childPath)
+        verify(c, childPath, depth + 1)
+verify(designPkg, "", 0)
+if remaining:
+    print "  STILL UPPERCASE:", len(remaining)
+    for p in remaining:
+        print "    " + p
+else:
+    print "  OK: no Package under reference/design starts with an uppercase letter"
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print ""
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

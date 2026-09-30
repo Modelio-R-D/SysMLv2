@@ -1,0 +1,150 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Reverts phase23's five reciprocal notes, which were all wrong.
+#
+# Phase23 derived them mechanically from "the opposite of X must redefine the opposite of what X
+# redefines" -- sound reasoning, but applied on top of phase17's WRONG premise (that
+# "<xxx>OwningDefinition" was "<xxx>Definition" renamed). Checked against the normative XMI
+# directly afterwards, all five are wrong in one or both of two ways:
+#
+#   * the relation is subsetting, not redefinition (<subsettedProperty>, not <redefinedProperty>);
+#   * the target named is not the one the XMI declares.
+#
+#   definedEnumeration     XMI: subsets DataType.definedAttribute      (phase23 said: redefines Definition.ownedAttribute)
+#   definedPort            XMI: subsets Class.definedOccurrence        (phase23 said: redefines Definition.ownedOccurrence)
+#   definedRequirement     XMI: subsets Predicate.definedConstraint    (phase23 said: redefines Definition.ownedConstraint)
+#   definedCase            XMI: subsets Function.definedCalculation    (phase23 said: redefines Definition.ownedCalculation)
+#   conjugatedPortDefinition  XMI: subsets Namespace.ownedMember -- correct target, but a SUBSET,
+#                             and the correct "Subsets (per normative XMI)" line was ALREADY
+#                             present; phase23 merely added a bogus "Redefines" line on top.
+#
+# Four of the five true targets (DataType.definedAttribute, Class.definedOccurrence,
+# Predicate.definedConstraint, Function.definedCalculation) are themselves among the 32
+# SysML -> KerML associations deliberately absent from the design, so the true fact is not
+# expressible here either; it is recorded in prose, as phase24/25 already do.
+#
+# For conjugatedPortDefinition, stripping the added line simply restores the correct original.
+
+STRIP = [
+    ("EnumerationDefinition", "definedEnumeration",
+     "Redefines (per normative XMI): Definition.ownedAttribute",
+     "DataType.definedAttribute"),
+    ("PortDefinition", "definedPort",
+     "Redefines (per normative XMI): Definition.ownedOccurrence",
+     "Class.definedOccurrence"),
+    ("PortDefinition", "conjugatedPortDefinition",
+     "Redefines (per normative XMI): Namespace.ownedMember",
+     None),  # None = nothing to record, the correct Subsets line is already there
+    ("RequirementDefinition", "definedRequirement",
+     "Redefines (per normative XMI): Definition.ownedConstraint",
+     "Predicate.definedConstraint"),
+    ("CaseDefinition", "definedCase",
+     "Redefines (per normative XMI): Definition.ownedCalculation",
+     "Function.definedCalculation"),
+]
+
+TEMPLATE = ("Not expressible in reference/design: the normative XMI declares this property as a "
+            "subset of %s, which is deliberately absent from the design (its association's "
+            "reverse end would be a KerML class pointing at a SysML class; see "
+            "deck-implementation-plan/WIP-2026-09-27-redefines-xmi). reference/spec is unaffected.")
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for nt in mmExt.findNoteTypes("", element.getMClass()):
+        if nt.getName().lower() == "description":
+            return nt
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+resolved = []
+for owner_name, end_name, wrong_line, true_subset_target in STRIP:
+    cls = find_class(designPkg, owner_name)
+    if cls is None:
+        raise Exception("class not found: " + owner_name)
+    member = None
+    for e in cls.getOwnedEnd():
+        if e.getName() == end_name:
+            member = e
+            break
+    if member is None:
+        raise Exception("end not found: " + owner_name + "." + end_name)
+    current = description_content(member)
+    if not current or not current.endswith("\n" + wrong_line):
+        raise Exception("unexpected content for %s.%s, does not end with the phase23 line: %r" % (
+            owner_name, end_name, current))
+    restored = current[: -(len("\n" + wrong_line))]
+    if true_subset_target is not None:
+        restored = restored + "\n" + (TEMPLATE % true_subset_target)
+    resolved.append((member, owner_name, end_name, current, restored))
+
+print "verified, ready to revert:", len(resolved)
+for member, o, e, before, after in resolved:
+    print "  %s.%s" % (o, e)
+    print "    before: %r" % before
+    print "    after : %r" % after
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 26: revert phase23's five wrong reciprocal notes")
+try:
+    for member, o, e, before, after in resolved:
+        set_description(member, after)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes reverted:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

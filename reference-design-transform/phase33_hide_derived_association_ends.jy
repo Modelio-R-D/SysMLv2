@@ -1,0 +1,131 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Make every DERIVED navigable association end in reference/design NON-NAVIGABLE, so SemGen stops
+# generating accessors for it.
+#
+# WHY NOT DELETE THEM, which was the original idea:
+#   The two ends of an association are nested in one element -- deleting one end takes its opposite
+#   with it. Deleting Definition.ownedPort would destroy PortUsage.portOwningDefinition too, and that
+#   one is STORED and load-bearing. Non-navigable achieves the same generated result (every SemGen
+#   generator gates on ModelUtils.isNavigable, which reads exactly this flag) while leaving the
+#   association and its stored side intact -- and it is reversible with one flag, which deletion is not.
+#
+# WHY REMOVE THEM AT ALL:
+#   A derived property has no storage, so no descriptor is generated for it, yet accessors were being
+#   generated that referenced one. Until 4.0.17 that was 99 compile errors; since 4.0.17 it is 291
+#   methods that throw UnsupportedOperationException. Neither is a usable foundation. Computing the
+#   values is not possible from this model: the normative XMI states those derivations in OCL and prose,
+#   and the model's own 'Subsets' notes are demonstrably incomplete (Element.owner records 0 subsetters
+#   where the XMI declares 2).
+#
+# WHAT SURVIVES:
+#   262 stored navigable ends -- the Relationship/Membership/Specialization backbone KerML is built on:
+#   ownedRelationship, owningRelationship, Relationship.source, Relationship.target,
+#   OwningMembership.ownedMemberElement and so on. Every removed accessor was a VIEW over that backbone,
+#   so no structure becomes unrepresentable; traversing it just takes an explicit hop through the
+#   relationship instead of a typed shortcut. Every one of the 291 has a navigable opposite, so no
+#   association is left with a dangling single end.
+#
+# WHY ALL 291 AND NOT A SUBSET:
+#   85 of them look like plain inverse roles that could instead be un-marked derived, giving real
+#   bidirectional navigation. That split depends on the 'Subsets' notes, which are known incomplete --
+#   the same unreliable source that would have mis-classified Element.owner. A uniform change needs no
+#   classification and cannot be wrong in that way. Restoring individual accessors later is one flag
+#   each, once someone decides which conveniences are worth a real derivation rule.
+#
+# REVERSING THIS: set isNavigable back to true on the ends listed in the output below.
+#
+# No metaclass is renamed or removed, so the previous generated output does NOT need clearing first.
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+root = None
+for r in modelingSession.getModel().getModelRoots():
+    if r.getName() == "sysml2":
+        root = r
+        break
+if root is None:
+    raise Exception("sysml2 root not found")
+design = find_child(find_child(find_child(root, "modelio.sysml"), "reference"), "design")
+if design is None:
+    raise Exception("reference/design not found")
+
+classes = []
+def collect(p, d=0):
+    if d > 60:
+        return
+    for c in p.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class":
+                classes.append(c)
+        except:
+            pass
+        collect(c, d + 1)
+collect(design)
+
+targets = []
+for cls in classes:
+    for e in cls.getOwnedEnd():
+        if e.isNavigable() and e.isIsDerived():
+            opp = e.getOpposite()
+            oppOwner = opp.getCompositionOwner() if opp is not None else None
+            targets.append((e, cls.getName(), e.getName(),
+                            ("%s.%s" % (oppOwner.getName(), opp.getName()))
+                            if (opp is not None and oppOwner is not None) else "(none)",
+                            "Y" if (opp is not None and opp.isNavigable() and not opp.isIsDerived()) else "N"))
+
+# Refuse if an association would be left with NO navigable end at all AND its opposite is not stored --
+# that state carries nothing and would silently drop a relationship. Both-derived pairs are expected and
+# allowed (their relationship is carried by the stored backbone), so this only guards the unexpected.
+for e, cn, en, oppLabel, oppStored in targets:
+    opp = e.getOpposite()
+    if opp is None:
+        raise Exception("%s.%s has no opposite -- refusing, this would orphan the association" % (cn, en))
+
+print "derived navigable ends to hide:", len(targets)
+stored = len([t for t in targets if t[4] == "Y"])
+print "  with a STORED opposite (association keeps a working side):", stored
+print "  with a derived opposite (relationship carried by the backbone):", len(targets) - stored
+print ""
+for e, cn, en, oppLabel, oppStored in sorted(targets, key=lambda t: (t[1], t[2])):
+    print "  %-52s opposite %-46s storedOpp=%s" % ("%s.%s" % (cn, en), oppLabel, oppStored)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 33: hide derived association ends from generation")
+try:
+    for e, cn, en, oppLabel, oppStored in targets:
+        e.setNavigable(False)
+        changed += 1
+    tr.commit()
+    print ""
+    print "COMMITTED OK, ends made non-navigable:", changed
+except Exception, ex:
+    tr.rollback()
+    print "ROLLED BACK:", ex
+    raise
+
+print ""
+print "verification, re-read from the model:"
+remaining = []
+navStored = 0
+for cls in classes:
+    for e in cls.getOwnedEnd():
+        if e.isNavigable():
+            navStored += 1
+            if e.isIsDerived():
+                remaining.append("%s.%s" % (cls.getName(), e.getName()))
+print "  navigable ends still derived:", len(remaining)
+for rname in remaining[:20]:
+    print "    " + rname
+print "  navigable ends remaining in total (the stored backbone):", navStored
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print ""
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

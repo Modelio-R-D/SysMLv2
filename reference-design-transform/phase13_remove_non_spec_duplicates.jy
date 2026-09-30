@@ -1,0 +1,109 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+TARGETS = {
+    "KerMLModelElement": ["annotation", "membership"],
+    "Redefinition": ["owningFeature"],
+}
+
+def find_child(element, name):
+    if element is None:
+        return None
+    for child in element.getCompositionChildren():
+        if child.getName() == name:
+            return child
+    return None
+
+roots = [root for root in modelingSession.getModel().getModelRoots() if root.getName() == "sysml2"]
+if len(roots) != 1:
+    raise Exception("expected one sysml2 root, found " + str(len(roots)))
+
+reference = find_child(find_child(roots[0], "modelio.sysml"), "reference")
+design = find_child(reference, "design")
+if design is None:
+    raise Exception("reference/design not found")
+
+queue = deque([design])
+seen = set()
+found = {}
+while queue and len(seen) < 5000:
+    element = queue.popleft()
+    element_id = element.getUuid()
+    if element_id in seen:
+        continue
+    seen.add(element_id)
+    try:
+        if element.getMClass().getName() == "Class" and element.getName() in TARGETS:
+            attrs = [attribute for attribute in element.getOwnedAttribute() if attribute.getName() in TARGETS[element.getName()]]
+            found[element.getName()] = attrs
+    except:
+        pass
+    try:
+        for child in element.getCompositionChildren():
+            queue.append(child)
+    except:
+        pass
+
+missing = [name for name in TARGETS if name not in found]
+if missing:
+    print "INFO: target classes already clean or absent:", missing
+
+for class_name in sorted(TARGETS.keys()):
+    if class_name not in found:
+        found[class_name] = []
+
+for class_name, attrs in found.items():
+    expected = TARGETS[class_name]
+    actual = sorted([attribute.getName() for attribute in attrs])
+    if set(actual) != set(expected):
+        print "INFO:", class_name, "expected:", expected, "actual:", actual
+
+removed = []
+transaction = modelingSession.createTransaction("Phase 13: remove remaining non-spec duplicate artefacts")
+try:
+    for class_name in sorted(TARGETS.keys()):
+        attrs = list(found.get(class_name, []))
+        if len(attrs) == 0:
+            print "NO-OP:", class_name, "already clean"
+            continue
+        for attribute in attrs:
+            attribute.delete()
+            removed.append(class_name + "." + attribute.getName())
+    transaction.commit()
+    print "COMMITTED OK, removed:", removed
+except Exception, error:
+    transaction.rollback()
+    print "ROLLED BACK:", error
+    raise
+
+if removed:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"
+
+for class_name in sorted(TARGETS.keys()):
+    cls = None
+    queue = deque([design])
+    seen = set()
+    while queue and len(seen) < 5000:
+        element = queue.popleft()
+        eid = element.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if element.getMClass().getName() == "Class" and element.getName() == class_name:
+                cls = element
+                break
+        except:
+            pass
+        try:
+            for child in element.getCompositionChildren():
+                queue.append(child)
+        except:
+            pass
+    if cls is None:
+        print "WARNING: class not found after cleanup:", class_name
+        continue
+    print class_name + " remaining:", sorted([attribute.getName() for attribute in cls.getOwnedAttribute()])

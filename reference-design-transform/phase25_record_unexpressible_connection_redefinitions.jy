@@ -1,0 +1,128 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Same correction as phase24, for the last two notes in reference/design that name an
+# absent-by-design target: InterfaceUsage.interfaceDefinition and
+# AllocationUsage.allocationDefinition both redefine ConnectionUsage.connectionDefinition, which
+# is one of the 32 SysML -> KerML associations deliberately removed to keep KerML independent
+# (its reverse end, AssociationStructure.definedConnection, would be a KerML class pointing at a
+# SysML class).
+#
+# Unlike phase24's four, these two were never mis-redirected -- spec and design still agree and
+# always named the true target. They simply point at something design does not have, which makes
+# PropertyRedefinition.resolve() throw and would abort generation at its preflight. Same
+# treatment: record the normative fact in prose, without the literal directive phrase the parser
+# reads. reference/spec is left untouched.
+
+FIXES = [
+    ("InterfaceUsage", "interfaceDefinition",
+     "Redefines (per normative XMI): ConnectionUsage.connectionDefinition",
+     "ConnectionUsage.connectionDefinition"),
+    ("AllocationUsage", "allocationDefinition",
+     "Redefines (per normative XMI): ConnectionUsage.connectionDefinition",
+     "ConnectionUsage.connectionDefinition"),
+]
+
+TEMPLATE = ("Not expressible in reference/design: the normative XMI declares this property as a "
+            "redefinition of %s, which is deliberately absent from the design. That property's "
+            "association has its reverse end owned by a KerML class pointing at a SysML class, "
+            "which the KerML independence rule forbids, and Modelio rule E211 does not allow "
+            "keeping one end of an association without the other. One of 32 such cases; the full "
+            "list is in deck-implementation-plan/WIP-2026-09-27-redefines-xmi. reference/spec still "
+            "carries the normative declaration.")
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for nt in mmExt.findNoteTypes("", element.getMClass()):
+        if nt.getName().lower() == "description":
+            return nt
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+resolved = []
+for owner_name, end_name, expected_current, true_target in FIXES:
+    cls = find_class(designPkg, owner_name)
+    if cls is None:
+        raise Exception("class not found: " + owner_name)
+    member = None
+    for e in cls.getOwnedEnd():
+        if e.getName() == end_name:
+            member = e
+            break
+    if member is None:
+        raise Exception("end not found: " + owner_name + "." + end_name)
+    actual = description_content(member)
+    actual_norm = actual if (actual and actual.strip()) else None
+    if actual_norm != expected_current:
+        raise Exception("unexpected content for %s.%s: %r (expected %r)" % (
+            owner_name, end_name, actual, expected_current))
+    resolved.append((member, owner_name, end_name, actual, TEMPLATE % true_target))
+
+print "verified, ready to rewrite:", len(resolved)
+for member, o, e, before, after in resolved:
+    print "  %s.%s" % (o, e)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 25: record 2 remaining unexpressible redefinitions")
+try:
+    for member, o, e, before, after in resolved:
+        set_description(member, after)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes rewritten:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

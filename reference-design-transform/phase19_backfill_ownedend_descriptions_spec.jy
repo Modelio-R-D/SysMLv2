@@ -1,0 +1,147 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+import json
+
+# Fixes a systematic gap in reference/spec's own documentation: the original spec-note
+# extraction only ever walked classes' own <ownedAttribute> lists in the normative XMI. A
+# large, distinct category of documented properties -- association ends declared as
+# <ownedEnd> of the Association itself (the usual XMI shape for a derived/reverse-navigation
+# role, e.g. "the Xs that have a certain Y as their z") -- was never extracted at all.
+#
+# A full extraction of every <ownedEnd> with a real <ownedComment>, across both KerML and
+# SysML normative XMI files, found 244 documented properties (239 distinct names, 5 reused
+# across genuinely different associations). Cross-checked against every currently-empty
+# AssociationEnd description note in the live reference/spec (276 found): 232 matched
+# unambiguously by name; 9 needed disambiguating by which candidate's own comment text/
+# association naming actually names the live owner class (done by hand, verified against the
+# exact extracted association_id, not retyped text -- see final_ownedend_fixes.json); 35 are
+# genuinely undocumented in the norm itself (no <ownedComment> at all), left untouched.
+#
+# This script applies exactly those 241 resolved (owner class, end name, comment) fixes onto
+# reference/spec. Nothing is overwritten: each target's current note is checked empty first;
+# a non-empty target is skipped and reported, not silently replaced.
+
+FIXES_PATH = r"C:\Users\jcadavid\AppData\Local\Temp\claude\c--Users-jcadavid-OneDrive---LA-POSTE-GROUPE-SysMLv2\5277a14e-87b7-447d-bb53-a5a92a3c9bb4\scratchpad\final_ownedend_fixes.json"
+
+with open(FIXES_PATH, "r") as f:
+    fixes = json.load(f)
+
+print "fixes loaded:", len(fixes)
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+specPkg = find_child(refPkg, "spec")
+if specPkg is None:
+    raise Exception("reference/spec not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        if noteType.getName().lower() == "description":
+            return noteType
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+class_cache = {}
+
+def get_class(name):
+    if name not in class_cache:
+        class_cache[name] = find_class(specPkg, name)
+    return class_cache[name]
+
+to_apply = []
+not_found_class = []
+not_found_end = []
+already_has_content = []
+
+for fix in fixes:
+    owner_name = fix["owner"]
+    end_name = fix["end"]
+    comment = fix["comment"]
+    owner_class = get_class(owner_name)
+    if owner_class is None:
+        not_found_class.append((owner_name, end_name))
+        continue
+    end = None
+    for e in owner_class.getOwnedEnd():
+        if e.getName() == end_name:
+            end = e
+            break
+    if end is None:
+        not_found_end.append((owner_name, end_name))
+        continue
+    existing = description_content(end)
+    if existing and existing.strip():
+        already_has_content.append((owner_name, end_name, existing))
+        continue
+    to_apply.append((end, owner_name, end_name, comment))
+
+print "resolved to real live elements, ready to apply:", len(to_apply)
+print "owner class not found:", len(not_found_class)
+for o, e in not_found_class:
+    print "  class not found:", o, "/", e
+print "end not found on owner:", len(not_found_end)
+for o, e in not_found_end:
+    print "  end not found:", o + "." + e
+print "already has content (skipped, not overwritten):", len(already_has_content)
+for o, e, c in already_has_content:
+    print "  already documented:", o + "." + e, ":", repr(c[:60])
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 19: backfill ownedEnd descriptions in reference/spec")
+try:
+    for end, owner_name, end_name, comment in to_apply:
+        set_description(end, comment)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes added:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

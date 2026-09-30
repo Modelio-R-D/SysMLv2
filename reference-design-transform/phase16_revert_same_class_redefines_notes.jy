@@ -1,0 +1,142 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+import re
+
+# Corrective follow-up to phase15: PropertyRedefinition.resolve() (the real Java resolver, and
+# the equivalent walk used to decide what phase15 should add) only ever searches a class's
+# ANCESTORS for the class named in a "Redefines (per normative XMI): ClassName.propertyName"
+# note -- it never considers the SAME class the note-bearing property already lives on. Some of
+# the 88 notes phase15 added are self-referential this way (e.g. KerMLModelElement.membership
+# was given "Redefines (per normative XMI): KerMLModelElement.targetRelationship" -- but
+# targetRelationship lives on KerMLModelElement itself, not on some ancestor of it). Real
+# generation calling resolve() on these throws (0 ancestor matches found), so this must be fixed
+# before anything else touches the model. This script removes ONLY the exact line phase15 added,
+# for ONLY the notes that are genuinely self-referential (owner class name == referenced class
+# name) -- it restores whatever was there before phase15 ran (nothing, if the note was newly
+# created; the prior content, if phase15 appended to something that already existed), and leaves
+# every other note phase15 added completely untouched.
+
+EXPECTED_DESIGN_ENDS = 556
+
+PATTERN = re.compile(r"Redefines \(per normative XMI\):\s*([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)")
+
+factory = modelingSession.getModel()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def bfs(root, mclass, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    out = []
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        if len(seen) > max_nodes:
+            break
+        try:
+            if el.getMClass().getName() == mclass:
+                out.append(el)
+        except:
+            pass
+        try:
+            for child in el.getCompositionChildren():
+                q.append(child)
+        except:
+            pass
+    return out
+
+def description_note_type(element):
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        if noteType.getName().lower() == "description":
+            return noteType
+    return None
+
+def description_content(element):
+    noteType = description_note_type(element)
+    if noteType is None:
+        return None
+    note = element.getNote(noteType)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    noteType = description_note_type(element)
+    if noteType is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(noteType, content)
+
+design_ends = bfs(designPkg, "AssociationEnd")
+if len(design_ends) != EXPECTED_DESIGN_ENDS:
+    raise Exception("expected " + str(EXPECTED_DESIGN_ENDS) + " design AssociationEnds, found " + str(len(design_ends)))
+
+to_fix = []  # (end, before_content, after_content_or_None)
+
+for end in design_ends:
+    content = description_content(end)
+    if not content:
+        continue
+    m = PATTERN.search(content)
+    if not m:
+        continue
+    class_name, member_name = m.group(1), m.group(2)
+    owner = end.getCompositionOwner()
+    if owner.getName() != class_name:
+        continue  # not self-referential, leave it exactly as-is
+
+    added_line = "Redefines (per normative XMI): %s.%s" % (class_name, member_name)
+    if content == added_line:
+        # phase15 created this note fresh with nothing before it: fully clear it.
+        to_fix.append((end, content, None))
+    elif content.endswith("\n" + added_line):
+        # phase15 appended to pre-existing content: strip exactly that suffix back off.
+        restored = content[: -(len("\n" + added_line))]
+        to_fix.append((end, content, restored))
+    else:
+        # Content contains this exact self-referential Redefines line but not in a shape phase15
+        # would have produced (e.g. it wasn't the last line, or wording differs slightly) -- do
+        # NOT guess; leave it alone and flag for a human to look at instead.
+        print "SKIPPED (unexpected shape, needs manual look): %s.%s : %r" % (owner.getName(), end.getName(), content)
+
+print "self-referential notes to revert:", len(to_fix)
+for end, before, after in to_fix:
+    print "  %s.%s : %r -> %r" % (end.getCompositionOwner().getName(), end.getName(), before, after)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 16: revert self-referential Redefines notes added by phase 15")
+try:
+    for end, before, after in to_fix:
+        set_description(end, after if after else "")
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes reverted:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

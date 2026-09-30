@@ -1,0 +1,128 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+EXCLUDED_CLASSES = set([
+    "Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage",
+])
+EXPECTED_DESIGN_ENDS = 556
+EXPECTED_MATCHED_ENDS = 548
+EXPECTED_DERIVED_ENDS = 291
+EXPECTED_UNMATCHED = set([
+    ("AnnotatingElement", "annotatedElement", "KerMLModelElement", "annotatingElements"),
+    ("KerMLModelElement", "annotatingElements", "AnnotatingElement", "annotatedElement"),
+    ("MultiplicityRange", "bound", "bound", "multiplicity"),
+    ("MultiplicityRange", "lowerBound", "lowerBound", "multiplicity"),
+    ("MultiplicityRange", "upperBound", "upperBound", "multiplicity"),
+    ("bound", "multiplicity", None, None),
+    ("lowerBound", "multiplicity", None, None),
+    ("upperBound", "multiplicity", None, None),
+])
+
+def find_child(element, name):
+    if element is None:
+        return None
+    for child in element.getCompositionChildren():
+        if child.getName() == name:
+            return child
+    return None
+
+def collect(root, mclass, limit=10000):
+    queue = deque([root])
+    seen = set()
+    result = []
+    while queue and len(seen) < limit:
+        element = queue.popleft()
+        element_id = element.getUuid()
+        if element_id in seen:
+            continue
+        seen.add(element_id)
+        try:
+            if element.getMClass().getName() == mclass:
+                result.append(element)
+        except:
+            pass
+        try:
+            for child in element.getCompositionChildren():
+                queue.append(child)
+        except:
+            pass
+    return result
+
+def normalized_name(name):
+    if name == "Element":
+        return "KerMLModelElement"
+    return name
+
+def signature(end):
+    owner = end.getCompositionOwner()
+    opposite = end.getOpposite()
+    opposite_owner = opposite.getCompositionOwner() if opposite is not None else None
+    return (
+        normalized_name(owner.getName()) if owner is not None else None,
+        end.getName(),
+        normalized_name(opposite_owner.getName()) if opposite_owner is not None else None,
+        opposite.getName() if opposite is not None else None,
+    )
+
+roots = [root for root in modelingSession.getModel().getModelRoots() if root.getName() == "sysml2"]
+if len(roots) != 1:
+    raise Exception("expected one sysml2 root, found " + str(len(roots)))
+
+reference = find_child(find_child(roots[0], "modelio.sysml"), "reference")
+spec = find_child(reference, "spec")
+design = find_child(reference, "design")
+if spec is None or design is None:
+    raise Exception("reference/spec or reference/design not found")
+
+spec_ends = collect(spec, "AssociationEnd")
+design_ends = collect(design, "AssociationEnd")
+if len(design_ends) != EXPECTED_DESIGN_ENDS:
+    raise Exception("expected " + str(EXPECTED_DESIGN_ENDS) + " design ends, found " + str(len(design_ends)))
+
+expected = {}
+for end in spec_ends:
+    end_signature = signature(end)
+    if end_signature[0] in EXCLUDED_CLASSES or end_signature[2] in EXCLUDED_CLASSES:
+        continue
+    expected.setdefault(end_signature, set()).add(end.isIsDerived())
+
+ambiguous = sorted([key for key, states in expected.items() if len(states) > 1])
+if ambiguous:
+    raise Exception("ambiguous source derived states: " + str(ambiguous))
+
+design_signatures = set([signature(end) for end in design_ends])
+unmatched = design_signatures - set(expected.keys())
+if unmatched != EXPECTED_UNMATCHED:
+    raise Exception("unexpected unmatched design ends: " + str(sorted(unmatched)))
+
+matched = [end for end in design_ends if signature(end) in expected]
+if len(matched) != EXPECTED_MATCHED_ENDS:
+    raise Exception("expected " + str(EXPECTED_MATCHED_ENDS) + " matched ends, found " + str(len(matched)))
+
+derived_count = sum([1 for end in matched if expected[signature(end)] == set([True])])
+if derived_count != EXPECTED_DERIVED_ENDS:
+    raise Exception("expected " + str(EXPECTED_DERIVED_ENDS) + " derived ends, found " + str(derived_count))
+
+changed = 0
+transaction = modelingSession.createTransaction("Phase 12: restore derived association ends")
+try:
+    for end in matched:
+        should_be_derived = expected[signature(end)] == set([True])
+        if end.isIsDerived() != should_be_derived:
+            end.setIsDerived(should_be_derived)
+            changed += 1
+    transaction.commit()
+    print "COMMITTED OK, derived states changed:", changed
+except Exception, error:
+    transaction.rollback()
+    print "ROLLED BACK:", error
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"
+
+actual_derived = sum([1 for end in matched if end.isIsDerived()])
+print "matched ends:", len(matched), "derived ends:", actual_derived

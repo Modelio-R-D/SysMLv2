@@ -1,9 +1,9 @@
 # KerML et SysML v2 — comprendre les deux métamodèles en détail
 
 Document de référence conceptuel, complémentaire aux trois études de mapping déjà produites dans `SysMLv2/deck-implementation-plan/` :
-- [spec-complete-greffe-sysml-modelio.md](../deck-implementation-plan/spec-complete-greffe-sysml-modelio.md) — points de greffe, 3 chevauchements, 34 cas d'héritage multiple, processus SemGen
-- [etude-comparative-kerml-modelio.md](../deck-implementation-plan/etude-comparative-kerml-modelio.md) — passage classe par classe des couches Root/Core/Kernel de KerML face à Modelio
-- [etude-comparative-sysml-modelio.md](../deck-implementation-plan/etude-comparative-sysml-modelio.md) — passage par domaine des concepts SysML v2 (Requirements, Ports, Cases, Views…) face à Modelio
+- [WIP-2026-09-28-spec-complete-greffe-sysml-modelio.md](../deck-implementation-plan/WIP-2026-09-28-spec-complete-greffe-sysml-modelio.md) — points de greffe, 3 chevauchements, 34 cas d'héritage multiple, processus SemGen
+- [WIP-2026-09-16-etude-comparative-kerml-modelio.md](../deck-implementation-plan/WIP-2026-09-16-etude-comparative-kerml-modelio.md) — passage classe par classe des couches Root/Core/Kernel de KerML face à Modelio
+- [WIP-2026-09-09-etude-comparative-sysml-modelio.md](../deck-implementation-plan/WIP-2026-09-09-etude-comparative-sysml-modelio.md) — passage par domaine des concepts SysML v2 (Requirements, Ports, Cases, Views…) face à Modelio
 
 **Objectif de ce document** : répondre à « qu'est-ce que KerML et SysML v2 contiennent réellement ? », indépendamment de Modelio — une explication conceptuelle du métamodèle lui-même, avec un développement approfondi de la **Bibliothèque Sémantique** de KerML (section `9.2` de la spec), qui n'était que mentionnée en une phrase dans l'étude KerML.
 

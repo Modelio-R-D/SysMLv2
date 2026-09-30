@@ -1,0 +1,72 @@
+# Execute phase 10: remove KerMLModelElement duplicate properties (name, elementId)
+# These are redundant because they're inherited from ModelElement
+
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+TARGET_ATTRIBUTES = set(["name", "elementId"])
+
+def find_child(element, name):
+    if element is None:
+        return None
+    for child in element.getCompositionChildren():
+        if child.getName() == name:
+            return child
+    return None
+
+print "Phase 10: Remove KerMLModelElement duplicate properties"
+roots = [root for root in modelingSession.getModel().getModelRoots() if root.getName() == "sysml2"]
+if len(roots) != 1:
+    raise Exception("expected one sysml2 root, found " + str(len(roots)))
+
+design = find_child(find_child(find_child(roots[0], "modelio.sysml"), "reference"), "design")
+if design is None:
+    raise Exception("reference/design not found")
+
+queue = deque([design])
+seen = set()
+target = None
+while queue and len(seen) < 3000 and target is None:
+    element = queue.popleft()
+    element_id = element.getUuid()
+    if element_id in seen:
+        continue
+    seen.add(element_id)
+    try:
+        if element.getMClass().getName() == "Class" and element.getName() == "KerMLModelElement":
+            target = element
+            break
+    except:
+        pass
+    try:
+        for child in element.getCompositionChildren():
+            queue.append(child)
+    except:
+        pass
+
+if target is None:
+    raise Exception("KerMLModelElement not found")
+
+print "  Found KerMLModelElement"
+duplicates = [attribute for attribute in target.getOwnedAttribute() if attribute.getName() in TARGET_ATTRIBUTES]
+print "  Found %d duplicate attributes: %s" % (len(duplicates), [a.getName() for a in duplicates])
+
+if len(duplicates) > 0:
+    transaction = modelingSession.createTransaction("Phase 10: remove KerMLModelElement native duplicates")
+    try:
+        for attribute in duplicates:
+            print "    Deleting: %s" % attribute.getName()
+            attribute.delete()
+        transaction.commit()
+        print "  COMMITTED: %d attributes removed" % len(duplicates)
+    except Exception, error:
+        transaction.rollback()
+        print "  ROLLED BACK: %s" % error
+        raise
+    
+    projectService.saveProject(NullProgressMonitor())
+    remaining = [a.getName() for a in target.getOwnedAttribute()]
+    print "  Remaining attributes: %s" % sorted(remaining)
+    print "  Project saved, isDirty=%s" % projectService.isDirty()
+else:
+    print "  No duplicate attributes found (already clean)"

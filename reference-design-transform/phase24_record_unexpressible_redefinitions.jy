@@ -1,0 +1,150 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+
+# Corrects phase17's four WRONG note redirects, and records why the correct target cannot be
+# named at all in reference/design.
+#
+# What phase17 got wrong: it redirected these four notes from "<Xxx>Usage.<xxx>Definition" to
+# "<Xxx>Usage.<xxx>OwningDefinition" on the assumption the latter was the former, renamed. It
+# is not. The "...OwningDefinition" properties are a genuinely different, correctly-present
+# normative chain (ownership/containment, subsetting Usage.owningDefinition); the "...Definition"
+# properties are the typing chain (subsetting Usage.definition -> Feature.type). They merely
+# share a name fragment. Matching on name resemblance instead of shape (multiplicity + target +
+# derived) was the error.
+#
+# Why we cannot simply restore the true target name: AttributeUsage.attributeDefinition,
+# OccurrenceUsage.occurrenceDefinition, ConstraintUsage.constraintDefinition and
+# CalculationUsage.calculationDefinition are all ABSENT from reference/design, deliberately --
+# each is one of the 32 SysML -> KerML associations removed to keep KerML independent of SysML
+# (their reverse end would be a KerML class pointing at a SysML class; Modelio rule E211 forbids
+# keeping one end without the other). A note naming an absent property makes
+# PropertyRedefinition.resolve() throw "Expected one inherited property ... found 0", which
+# aborts the whole generation at its preflight -- so the fact must be recorded in a form the
+# parser does NOT read as a resolvable directive.
+#
+# The replacement text therefore deliberately avoids the literal trigger phrase
+# "Redefines (per normative XMI):" while still naming the true normative target in prose.
+# reference/spec is left untouched: it still carries the correct, resolvable directive, which is
+# right -- spec is the fidelity mirror and is never generated from.
+
+FIXES = [
+    # (owner_class, end_name, expected_current_content, true_target, replacement)
+    ("EnumerationUsage", "enumerationDefinition",
+     "Redefines (per normative XMI): AttributeUsage.attributeOwningDefinition",
+     "AttributeUsage.attributeDefinition"),
+    ("PortUsage", "portDefinition",
+     "Redefines (per normative XMI): OccurrenceUsage.occurrenceOwningDefinition",
+     "OccurrenceUsage.occurrenceDefinition"),
+    ("RequirementUsage", "requirementDefinition",
+     "Redefines (per normative XMI): ConstraintUsage.constraintOwningDefinition",
+     "ConstraintUsage.constraintDefinition"),
+    ("CaseUsage", "caseDefinition",
+     "Redefines (per normative XMI): CalculationUsage.calculationOwningDefinition",
+     "CalculationUsage.calculationDefinition"),
+]
+
+TEMPLATE = ("Not expressible in reference/design: the normative XMI declares this property as a "
+            "redefinition of %s, which is deliberately absent from the design. That property's "
+            "association has its reverse end owned by a KerML class pointing at a SysML class, "
+            "which the KerML independence rule forbids, and Modelio rule E211 does not allow "
+            "keeping one end of an association without the other. One of 32 such cases; the full "
+            "list is in deck-implementation-plan/WIP-2026-09-27-redefines-xmi. reference/spec still "
+            "carries the normative declaration.")
+
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for nt in mmExt.findNoteTypes("", element.getMClass()):
+        if nt.getName().lower() == "description":
+            return nt
+    return None
+
+def description_content(element):
+    nt = description_note_type(element)
+    if nt is None:
+        return None
+    note = element.getNote(nt)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    nt = description_note_type(element)
+    if nt is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(nt, content)
+
+resolved = []
+for owner_name, end_name, expected_current, true_target in FIXES:
+    cls = find_class(designPkg, owner_name)
+    if cls is None:
+        raise Exception("class not found: " + owner_name)
+    member = None
+    for e in cls.getOwnedEnd():
+        if e.getName() == end_name:
+            member = e
+            break
+    if member is None:
+        raise Exception("end not found: " + owner_name + "." + end_name)
+    actual = description_content(member)
+    actual_norm = actual if (actual and actual.strip()) else None
+    if actual_norm != expected_current:
+        raise Exception("unexpected content for %s.%s: %r (expected %r)" % (
+            owner_name, end_name, actual, expected_current))
+    resolved.append((member, owner_name, end_name, actual, TEMPLATE % true_target))
+
+print "verified, ready to rewrite:", len(resolved)
+for member, o, e, before, after in resolved:
+    print "  %s.%s" % (o, e)
+    print "    before: %r" % before
+    print "    after : %r" % after
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 24: record 4 unexpressible redefinitions, undo phase17's wrong redirects")
+try:
+    for member, o, e, before, after in resolved:
+        set_description(member, after)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes rewritten:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

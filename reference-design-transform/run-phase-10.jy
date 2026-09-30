@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Execute phase10_remove_kerml_model_element_duplicates.jy
+# Read and execute the phase 10 script
+
+import sys
+import os
+
+# Path to phase 10 script
+phase10_path = r'c:\Users\jcadavid\OneDrive - LA POSTE GROUPE\SysMLv2\reference-design-transform\phase10_remove_kerml_model_element_duplicates.jy'
+
+# Read the content
+with open(phase10_path, 'r', encoding='utf-8') as f:
+    phase10_code = f.read()
+
+# Execute in this Jython context
+exec(phase10_code)
+
+print("\nPhase 10 execution complete")
+print("Next: verify KerMLModelElement properties are removed, then regenerate with SemGen 4.0.04")

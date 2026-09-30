@@ -1,0 +1,49 @@
+from collections import deque
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+
+def find_blank_literals(root, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    blanks = []
+    total_literals = 0
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        if len(seen) > max_nodes:
+            break
+        try:
+            if el.isDeleted():
+                continue
+            if el.getMClass().getName() == "EnumerationLiteral":
+                total_literals += 1
+                if el.getName() is None or el.getName().strip() == "":
+                    owner = el.getCompositionOwner()
+                    blanks.append((owner.getName() if owner else "<orphan>", str(el.getUuid())))
+        except:
+            pass
+        try:
+            for c in el.getCompositionChildren():
+                q.append(c)
+        except:
+            pass
+    return blanks, total_literals
+
+designBlanks, designTotal = find_blank_literals(designPkg)
+print "total EnumerationLiterals in design: %d ; blank: %d ; details: %s" % (designTotal, len(designBlanks), designBlanks)

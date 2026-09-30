@@ -4,7 +4,7 @@ from collections import deque
 factory = modelingSession.getModel()
 
 EXCLUDED_CLASSES = set(["Comment", "Documentation", "Dependency", "MetadataDefinition", "MetadataUsage"])
-# Chevauchement redirect targets, per points-a-trancher.md point 3.
+# Chevauchement redirect targets, per WIP-2026-09-26-points-a-trancher.md point 3.
 REDIRECT = {
     "Comment": "Note",
     "Documentation": "Note",
@@ -120,7 +120,8 @@ def resolve_class(name):
         return infraByName.get(target)
     return designByName.get(name)
 
-stats = {"copied": 0, "skipped_owner_excluded": 0, "skipped_unresolved": 0, "redirected_type": 0}
+stats = {"copied": 0, "derived_ends": 0, "skipped_owner_excluded": 0,
+         "skipped_unresolved": 0, "redirected_type": 0}
 
 tr = modelingSession.createTransaction("Phase 4: copy associations with chevauchement redirect")
 try:
@@ -169,6 +170,9 @@ try:
             try:
                 newEnd.setIsOrdered(srcEnd.isIsOrdered())
                 newEnd.setIsUnique(srcEnd.isIsUnique())
+                newEnd.setIsDerived(srcEnd.isIsDerived())
+                if srcEnd.isIsDerived():
+                    stats["derived_ends"] += 1
             except:
                 pass
             try:

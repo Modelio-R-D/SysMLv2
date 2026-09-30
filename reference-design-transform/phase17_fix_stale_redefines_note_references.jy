@@ -1,0 +1,161 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+# Fixes 7 of the 9 "Redefines (per normative XMI): ..." notes that failed to resolve in the very
+# first live-model check of this whole effort. Each was verified individually before this script
+# was written (not guessed): 3 reference the pre-rename class name "Element" (renamed to
+# KerMLModelElement weeks before this effort started); 4 reference a property name that was
+# renamed on the SAME class it already correctly points at (e.g. AttributeUsage.attributeDefinition
+# -> AttributeUsage.attributeOwningDefinition), confirmed by dumping that class's actual owned
+# ends. The remaining 2 unresolved notes (both referencing ConnectionUsage.connectionDefinition,
+# which has zero owned ends at all) are NOT touched here -- that needs real investigation, not a
+# same-day guess, and is intentionally left for a separate pass.
+
+FIXES = [
+    # (owner_class_name, end_or_attr_name, is_assoc_end, expected_old_content, new_content)
+    ("ConjugatedPortDefinition", "originalPortDefinition", True,
+     "Redefines (per normative XMI): Element.owningNamespace",
+     "Redefines (per normative XMI): KerMLModelElement.owningNamespace"),
+    ("RequirementDefinition", "reqId", False,
+     "Redefines (per normative XMI): Element.declaredShortName",
+     "Redefines (per normative XMI): KerMLModelElement.declaredShortName"),
+    ("RequirementUsage", "reqId", False,
+     "Redefines (per normative XMI): Element.declaredShortName",
+     "Redefines (per normative XMI): KerMLModelElement.declaredShortName"),
+    ("EnumerationUsage", "enumerationDefinition", True,
+     "Redefines (per normative XMI): AttributeUsage.attributeDefinition",
+     "Redefines (per normative XMI): AttributeUsage.attributeOwningDefinition"),
+    ("PortUsage", "portDefinition", True,
+     "Redefines (per normative XMI): OccurrenceUsage.occurrenceDefinition",
+     "Redefines (per normative XMI): OccurrenceUsage.occurrenceOwningDefinition"),
+    ("RequirementUsage", "requirementDefinition", True,
+     "Redefines (per normative XMI): ConstraintUsage.constraintDefinition",
+     "Redefines (per normative XMI): ConstraintUsage.constraintOwningDefinition"),
+    ("CaseUsage", "caseDefinition", True,
+     "Redefines (per normative XMI): CalculationUsage.calculationDefinition",
+     "Redefines (per normative XMI): CalculationUsage.calculationOwningDefinition"),
+]
+
+factory = modelingSession.getModel()
+mmExt = modelingSession.getMetamodelExtensions()
+
+def find_child(el, name):
+    for c in el.getCompositionChildren():
+        if c.getName() == name:
+            return c
+    return None
+
+sysml2Root = None
+for root in modelingSession.getModel().getModelRoots():
+    if root.getName() == "sysml2":
+        sysml2Root = root
+        break
+if sysml2Root is None:
+    raise Exception("sysml2 root not found")
+
+pkgRoot = find_child(sysml2Root, "modelio.sysml")
+refPkg = find_child(pkgRoot, "reference")
+designPkg = find_child(refPkg, "design")
+if designPkg is None:
+    raise Exception("reference/design not found")
+
+def bfs(root, mclass, max_nodes=30000):
+    q = deque([root])
+    seen = set()
+    out = []
+    while q:
+        el = q.popleft()
+        eid = el.getUuid()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        if len(seen) > max_nodes:
+            break
+        try:
+            if el.getMClass().getName() == mclass:
+                out.append(el)
+        except:
+            pass
+        try:
+            for child in el.getCompositionChildren():
+                q.append(child)
+        except:
+            pass
+    return out
+
+def find_class(pkg, name, depth=0):
+    if depth > 60:
+        return None
+    for c in pkg.getCompositionChildren():
+        try:
+            if c.getMClass().getName() == "Class" and c.getName() == name:
+                return c
+        except:
+            pass
+        found = find_class(c, name, depth + 1)
+        if found:
+            return found
+    return None
+
+def description_note_type(element):
+    for noteType in mmExt.findNoteTypes("", element.getMClass()):
+        if noteType.getName().lower() == "description":
+            return noteType
+    return None
+
+def description_content(element):
+    noteType = description_note_type(element)
+    if noteType is None:
+        return None
+    note = element.getNote(noteType)
+    return note.getContent() if note else None
+
+def set_description(element, content):
+    noteType = description_note_type(element)
+    if noteType is None:
+        raise Exception("No description NoteType for " + element.getMClass().getName())
+    element.putNoteContent(noteType, content)
+
+def find_member(owner_class, member_name, is_assoc_end):
+    members = owner_class.getOwnedEnd() if is_assoc_end else owner_class.getOwnedAttribute()
+    for m in members:
+        if m.getName() == member_name:
+            return m
+    return None
+
+resolved = []
+for owner_name, member_name, is_assoc, expected_old, new_content in FIXES:
+    owner_class = find_class(designPkg, owner_name)
+    if owner_class is None:
+        raise Exception("class not found: " + owner_name)
+    member = find_member(owner_class, member_name, is_assoc)
+    if member is None:
+        raise Exception("member not found: " + owner_name + "." + member_name)
+    actual_old = description_content(member)
+    if actual_old != expected_old:
+        raise Exception("unexpected existing content for %s.%s: %r (expected %r)" % (
+            owner_name, member_name, actual_old, expected_old))
+    resolved.append((member, owner_name, member_name, expected_old, new_content))
+
+print "verified fixes ready to apply:", len(resolved)
+for member, owner_name, member_name, old, new in resolved:
+    print "  %s.%s : %r -> %r" % (owner_name, member_name, old, new)
+
+changed = 0
+tr = modelingSession.createTransaction("Phase 17: fix 7 stale Redefines note references")
+try:
+    for member, owner_name, member_name, old, new in resolved:
+        set_description(member, new)
+        changed += 1
+    tr.commit()
+    print "COMMITTED OK, notes fixed:", changed
+except Exception, e:
+    tr.rollback()
+    print "ROLLED BACK:", e
+    raise
+
+if changed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"

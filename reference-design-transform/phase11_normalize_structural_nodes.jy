@@ -1,0 +1,120 @@
+from org.eclipse.core.runtime import NullProgressMonitor
+from collections import deque
+
+EXPECTED_CLASS_COUNT = 171
+STRUCTURAL_NODE_CLASSES = set([
+    "ActionDefinition", "AllocationDefinition", "AnalysisCaseDefinition",
+    "AttributeDefinition", "CalculationDefinition", "CaseDefinition",
+    "ConcernDefinition", "ConjugatedPortDefinition", "ConnectionDefinition",
+    "ConstraintDefinition", "Definition", "EnumerationDefinition",
+    "FlowDefinition", "InterfaceDefinition", "ItemDefinition",
+    "LibraryPackage", "OccurrenceDefinition", "Package", "PartDefinition",
+    "PortDefinition", "RenderingDefinition", "RequirementDefinition",
+    "StateDefinition", "SysMLProject", "UseCaseDefinition",
+    "VerificationCaseDefinition", "ViewDefinition", "ViewpointDefinition",
+])
+
+def find_child(element, name):
+    if element is None:
+        return None
+    for child in element.getCompositionChildren():
+        if child.getName() == name:
+            return child
+    return None
+
+roots = [root for root in modelingSession.getModel().getModelRoots() if root.getName() == "sysml2"]
+if len(roots) != 1:
+    raise Exception("expected one sysml2 root, found " + str(len(roots)))
+
+reference = find_child(find_child(roots[0], "modelio.sysml"), "reference")
+design = find_child(reference, "design")
+spec = find_child(reference, "spec")
+if design is None or spec is None:
+    raise Exception("reference/spec or reference/design not found")
+
+queue = deque([design])
+seen = set()
+classes = []
+while queue and len(seen) < 3000:
+    element = queue.popleft()
+    element_id = element.getUuid()
+    if element_id in seen:
+        continue
+    seen.add(element_id)
+    try:
+        if element.getMClass().getName() == "Class":
+            classes.append(element)
+    except:
+        pass
+    try:
+        for child in element.getCompositionChildren():
+            queue.append(child)
+    except:
+        pass
+
+if len(classes) != EXPECTED_CLASS_COUNT:
+    raise Exception("expected " + str(EXPECTED_CLASS_COUNT) + " design classes, found " + str(len(classes)))
+
+by_name = dict([(model_class.getName(), model_class) for model_class in classes])
+missing = sorted([name for name in STRUCTURAL_NODE_CLASSES if name not in by_name])
+if missing:
+    raise Exception("structural node whitelist classes not found: " + str(missing))
+for name in STRUCTURAL_NODE_CLASSES:
+    if by_name[name].isIsAbstract():
+        raise Exception("structural node whitelist contains abstract class: " + name)
+
+sysml_component = find_child(spec, "SysML")
+module_name = sysml_component.getExtension()[0].getModule().getName()
+tag_type = modelingSession.getMetamodelExtensions().getTagType(
+    module_name, "Semantic.structural.node", classes[0].getMClass())
+if tag_type is None:
+    raise Exception("Semantic.structural.node TagType not found")
+
+factory = modelingSession.getModel()
+removed = 0
+added = 0
+transaction = modelingSession.createTransaction("Phase 11: normalize structural node persistence grains")
+try:
+    for model_class in classes:
+        tags = []
+        for tag in model_class.getTag():
+            definition = tag.getDefinition()
+            if definition and definition.getName() == "Semantic.structural.node":
+                tags.append(tag)
+
+        should_be_node = model_class.getName() in STRUCTURAL_NODE_CLASSES
+        if should_be_node and len(tags) == 0:
+            tag = factory.createTaggedValue()
+            tag.setDefinition(tag_type)
+            model_class.getTag().add(tag)
+            added += 1
+        elif should_be_node and len(tags) > 1:
+            for duplicate in tags[1:]:
+                duplicate.delete()
+                removed += 1
+        elif not should_be_node:
+            for tag in tags:
+                tag.delete()
+                removed += 1
+
+    transaction.commit()
+    print "COMMITTED OK, tags added:", added, "tags removed:", removed
+except Exception, error:
+    transaction.rollback()
+    print "ROLLED BACK:", error
+    raise
+
+if added > 0 or removed > 0:
+    projectService.saveProject(NullProgressMonitor())
+    print "isDirty after save:", projectService.isDirty()
+else:
+    print "NO-OP: project save skipped"
+
+flagged = []
+for model_class in classes:
+    for tag in model_class.getTag():
+        definition = tag.getDefinition()
+        if definition and definition.getName() == "Semantic.structural.node":
+            flagged.append(model_class.getName())
+            break
+print "structural nodes:", len(flagged), sorted(flagged)
