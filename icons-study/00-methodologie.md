@@ -1,5 +1,8 @@
 # Etude icones SysML v2 - Methodologie
 
+> Regles concretes de production (canevas, palette, alignement vectoriel, workflow de validation) :
+> voir [10-guide-visuel-icones.md](10-guide-visuel-icones.md) - a lire avant tout nouveau lot d'icones.
+
 ## Sources identifiees
 
 - **Icones UML** (base Modelio) : `H:\modelio\work\modelio-source\modelio\uml\uml.ui\mmimages`
@@ -78,6 +81,24 @@ Colonnes :
   `creer` (aucun equivalent direct, a dessiner)
 - `confiance` : `haute` / `moyenne` / `basse` (fiabilite de la correspondance proposee, a lever avant production)
 - `commentaire` : point d'attention
+- `chemin_icone_source` : chemin (dans ce depot) de l'icone de base a partir de laquelle on travaille -
+  `icons-study/07-icones-sources/sysml1/` ou `icons-study/07-icones-sources/uml/`. Vide si `action=creer`
+  sans aucune base.
+- `chemin_icone_sysml2` : chemin **ou sera creee** l'icone SysML v2 finale (SVG) -
+  `icons-study/08-icones-sysml2/sysml.<concept-en-minuscules>.svg` ; deux chemins separes par `" / "`
+  quand la ligne couvre Definition ET Usage (deux fichiers distincts a produire). Cas particulier
+  `SysMLProject` : pointe directement vers l'icone deja existante dans le module cible (`action=aucune`,
+  rien a produire). Dossier de staging cree le 2026-09-24 (vide pour l'instant, en attente de la
+  production reelle des icones).
+
+*(Historique : ces deux colonnes s'appelaient `chemin_source`/`chemin_destination` jusqu'au 2026-09-24 -
+noms trompeurs, corriges suite a une relecture : `chemin_destination` pointait en realite vers notre
+copie de la source, pas vers un futur livrable SysML v2.)*
+
+- `avancement` : `a_faire` (rien produit) / `a_valider` (genere dans
+  [09-icones-a-valider/](09-icones-a-valider/), en attente de validation PO) / `produit` (valide, copie
+  dans [08-icones-sysml2/](08-icones-sysml2/)). Ajoutee le 2026-09-24, calculee automatiquement a partir
+  des fichiers presents sur le disque (a regenerer via script si l'etat change, ne pas editer a la main).
 
 Ordre de priorite pour choisir une base par concept SysML v2 :
 1. icone SysML v1 existante (cas le plus frequent - action `recolorer`/`derive`) ;
@@ -140,6 +161,58 @@ tableaux - fait le meme jour (colonnes ajoutees a
 [02-inventaire-sysml1.csv](02-inventaire-sysml1.csv) et
 [03-mapping-sysml1-vers-sysml2.csv](03-mapping-sysml1-vers-sysml2.csv)).
 
+**Production (2026-09-24)** : les 6 icones bleu validees (Definition + Usage de `PartDefinition/Usage`,
+`PortDefinition/Usage`, `RequirementDefinition/Usage`) sont deplacees dans
+[08-icones-sysml2/](08-icones-sysml2/) sous leur nom final (`sysml.partdefinition.svg`, etc.) - ce sont
+les 3 premieres paires d'icones SysML v2 reellement produites. Le dossier `06-prototype-svg/`
+(bleu + violet) est supprime, son role de brouillon etant termine ; le violet n'a pas ete promu
+(non retenu par le PO pour l'instant, cf plus haut). Lignes `block`/`port`/`requirement` du mapping
+annotees `PRODUIT (2026-09-24)`.
+
+**Lot 2 valide (2026-09-24)** : 26 icones supplementaires validees et copiees dans
+[08-icones-sysml2/](08-icones-sysml2/) - total **32 icones produites** (6 du premier lot + 23 paires
+element : Constraint, Attribute, Interface, Flow, Enumeration, UseCase, Viewpoint, View, Concern,
+VerificationCase, Connection, Allocation + les 3 variantes de direction de port).
+
+**Lot 4 valide (2026-09-25)** : 15 icones (Item, State, Action - paires Definition/Usage -,
+AttributeUsage, BindingConnector, FeatureValue, InterfaceUsage provided/required,
+ConjugatedPortDefinition, AssertConstraintUsage, Invariant, LibraryPackage) validees et copiees dans
+[08-icones-sysml2/](08-icones-sysml2/) - total **63 icones produites**. AttributeDefinition (deja
+produite au lot 2) revue en meme temps : glyphe change de "cadre + barres" a "a:" sans cadre, par
+coherence avec la famille de badges-lettres (Trace/Dependency/Include/Reference). ConjugatedPortDefinition
+reprend le tilde `~` normatif KerML (pas une inversion miroir, idee du PO plus juste que la mienne) -
+voir [10-guide-visuel-icones.md](10-guide-visuel-icones.md) a completer avec cette lecon.
+
+**Lot 3 valide (2026-09-25)** : 16 icones (relations
+Trace/Association/Aggregation/Composition/Generalization/Dependency/Import, Package, Comment,
+ReferenceUsage, MergeNode/DecisionNode/TransitionUsage/AcceptActionUsage/SendActionUsage/
+IncludeUseCaseUsage) validees et copiees dans [08-icones-sysml2/](08-icones-sysml2/) - total
+**48 icones produites**. Plusieurs allers-retours de revue detaillee ont ete necessaires (fidelite
+stricte aux silhouettes source : forme en L pour Association/Generalization/Composition, badges
+`<lettre>` minuscule pour Trace/Dependency/IncludeUseCaseUsage, angles a 45 degres exacts pour
+MergeNode/DecisionNode, alignement de baseline pour le glyphe "ru" de ReferenceUsage...) - voir
+l'historique de la conversation pour le detail des corrections si besoin de reproduire la methode sur
+un futur lot. Un malentendu a brievement fait passer ces 16 fichiers en "produit" avant validation
+reelle, corrige le meme jour - toujours verifier la colonne `avancement` du mapping plutot que de
+supposer, et confirmer explicitement avant de promouvoir un lot.
+
+**Correction taille (2026-09-24)** : le PO a precise un canevas **64x64** (pas 24x24, la taille des
+PNG source). Les 6 SVG produits ont ete regeneres avec `viewBox="0 0 64 64"`, coordonnees et
+epaisseurs de trait recalculees proportionnellement (facteur x2,667) - pas un simple changement du
+chiffre de viewBox, qui aurait laisse des traits proportionnellement trop fins pour ce canevas plus
+grand. A appliquer systematiquement pour toute production future (etape 2 restante + etape 3).
+
+**Workflow de validation (2026-09-24, standard pour la suite)** : pour chaque nouveau lot d'icones,
+- generer d'abord dans [09-icones-a-valider/](09-icones-a-valider/), avec le nom final
+  (`sysml.<concept>.svg`) directement - couleur (bleu) et style (soulignement Usage) etant deja actes,
+  plus besoin de variantes multiples comme pour le premier lot ;
+- une fois valide par le PO, copier (pas deplacer) le lot dans
+  [08-icones-sysml2/](08-icones-sysml2/), annoter la ligne du mapping (`commentaire`) avec le statut
+  (`EN ATTENTE DE VALIDATION` puis `PRODUIT`) ;
+- vider `09-icones-a-valider/` avant le lot suivant - **pas d'historique des brouillons rejetes/remplaces
+  conserve** (choix explicite : le mapping garde deja la trace des decisions, un historique de fichiers
+  dupliquerait l'information pour peu de valeur).
+
 Consequence pratique pour l'etape 2/3 : dessiner directement en
 vectoriel (formes simples redessinees a partir de la silhouette de reference), pas de vectorisation
 automatique des PNG source qui donnerait un rendu "blocky" fidele aux pixels plutot qu'un trace propre.
@@ -149,7 +222,7 @@ automatique des PNG source qui donnerait un rendu "blocky" fidele aux pixels plu
 - Concerne les lignes `action = creer` du mapping (concepts sans equivalent UML/SysML v1 :
   `ViewpointDefinition`, `ConcernUsage`, `Metadata`, etc. - liste a completer apres validation du
   mapping avec la bibliotheque normative).
-- Methode : fiche de specification par icone (silhouette, badge, couleur, taille 24x24) construite a
+- Methode : fiche de specification par icone (silhouette, badge, couleur, canevas 64x64) construite a
   partir de la grammaire visuelle etablie en etape 2, pour garantir la coherence du set complet.
 
 ## A valider avec le PO / avant production en masse
@@ -189,3 +262,26 @@ fusionnees ici (seul emplacement conserve, versionne dans ce depot) :
 - Attention : ce metamodele Java (`SysML2Metamodel`, version `0.0.1`) est un travail en cours sur la
   branche `feature/sysml2` (cf commit "chargement du metamodele + repro du blocage heritage multiple") -
   a utiliser comme complement de validation, pas comme reference unique face a la bibliotheque normative.
+
+## Revue detaillee des 32 icones produites (2026-09-24)
+
+Corrections directes dans [08-icones-sysml2/](08-icones-sysml2/) suite a une relecture icone par icone
+par le PO (validees sans changement : Attribute, Concern, Enumeration, Interface, Part, Requirement,
+UseCase, VerificationCase) :
+
+- **Allocate** : reprend desormais la forme d'origine (`allocate.png`) - badge `<a>` en haut + fleche
+  pointillee en bas, plutot que le cadre+fleche generique du lot 2.
+- **Connection** : fleche simple (chevron ouvert), sans cadre, comme `connector.png` - plus proche
+  visuellement d'Association qu'auparavant, assume tel quel.
+- **Constraint** : glyphe change de crochets `[..]` a accolades `{..}`.
+- **Flow** : fleche pleine simple, sans cadre, comme `itemflow.png`.
+- **Port (direction in/out/inout)** : le badge de direction est deplace **a l'interieur** du petit
+  carre de port (chevron `<`, `>` ou `<>`) plutot qu'une fleche accolee a l'exterieur - trop petite
+  pour rester lisible une fois l'icone reduite en pratique.
+- **View / Viewpoint** : le glyphe interieur ("oeil"/chevrons) refait en rayons partant d'un seul point
+  (rendu "soleil"), plus fidele a la silhouette de `view.png`/`viewpoint.png`.
+
+Point de process a retenir : un malentendu a brievement fait passer le lot 3 (16 icones) en "produit"
+avant validation reelle (cf plus haut) - toujours confirmer explicitement avant de deplacer des fichiers
+vers `08-icones-sysml2/`, et privilegier une question de clarification en cas de doute sur le sens d'un
+message court comme "tous les icones valides".
