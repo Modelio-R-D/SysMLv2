@@ -4,30 +4,32 @@
 
 ## Table des matières
 
-1. [Le sens de « dérivé »](#1-le-sens-de--dérivé-)
-    1. [Exemple 1 : `subsettedProperty`](#11-exemple-1--subsettedproperty)
-    2. [Exemple 2 : `redefinedProperty`](#12-exemple-2--redefinedproperty)
-    3. [Exemple 3 : combinaison des mécanismes](#13-exemple-3--combinaison-des-mécanismes)
-2. [Proposition A : propriétés dérivées calculées par SemGen](#2-proposition-a--propriétés-dérivées-calculées-par-semgen)
-    1. [Stéréotype `DerivedComputed`](#21-stéréotype-derivedcomputed)
-    2. [Stéréotype `DerivedSubset`](#22-stéréotype-derivedsubset)
-    3. [Stéréotype `DerivedRedefinition`](#23-stéréotype-derivedredefinition)
-    4. [Règle de génération Java](#24-règle-de-génération-java)
-3. [Proposition B : ne générer que les propriétés non dérivées](#3-proposition-b--ne-générer-que-les-propriétés-non-dérivées)
-  1. [Bibliothèque commune de navigation et de calcul](#31-bibliothèque-commune-de-navigation-et-de-calcul)
-    1. [Contrat de base](#311-contrat-de-base)
-    2. [Fonctions essentielles](#312-fonctions-essentielles)
-    3. [Exemple `Behavior.step`](#313-exemple-behaviorstep)
-    4. [Règles de qualité](#314-règles-de-qualité)
-4. [Proposition C : traitement au cas par cas](#4-proposition-c--traitement-au-cas-par-cas)
-5. [Résumé et critères de choix](#5-résumé-et-critères-de-choix)
-6. [Préserver l'indépendance de KerML](#6-préserver-lindépendance-de-kerml)
-7. [Périmètre, inventaire et décisions](#7-périmètre-inventaire-et-décisions)
-    1. [Méthode de l'inventaire cible](#71-méthode-de-linventaire-cible)
-    2. [Inventaire des 291 propriétés dérivées à annoter](#72-inventaire-des-291-propriétés-dérivées-à-annoter)
-        1. [KerML](#721-kerml)
-        2. [SysML](#722-sysml)
-    3. [Points de discussion](#73-points-de-discussion)
+- [Propriétés dérivées : proposition pour `reference/design`](#propriétés-dérivées--proposition-pour-referencedesign)
+  - [Table des matières](#table-des-matières)
+  - [1. Le sens de « dérivé »](#1-le-sens-de--dérivé-)
+    - [1.1 Exemple 1 : `subsettedProperty`](#11-exemple-1--subsettedproperty)
+    - [1.2 Exemple 2 : `redefinedProperty`](#12-exemple-2--redefinedproperty)
+    - [1.3 Exemple 3 : combinaison des mécanismes](#13-exemple-3--combinaison-des-mécanismes)
+  - [2. Proposition A : propriétés dérivées calculées par SemGen](#2-proposition-a--propriétés-dérivées-calculées-par-semgen)
+    - [2.1 Stéréotype `DerivedComputed`](#21-stéréotype-derivedcomputed)
+    - [2.2 Stéréotype `DerivedSubset`](#22-stéréotype-derivedsubset)
+    - [2.3 Stéréotype `DerivedRedefinition`](#23-stéréotype-derivedredefinition)
+    - [2.4 Règle de génération Java](#24-règle-de-génération-java)
+  - [3. Proposition B : ne générer que les propriétés non dérivées](#3-proposition-b--ne-générer-que-les-propriétés-non-dérivées)
+    - [3.1 Bibliothèque commune de navigation et de calcul](#31-bibliothèque-commune-de-navigation-et-de-calcul)
+      - [3.1.1 Contrat de base](#311-contrat-de-base)
+      - [3.1.2 Fonctions essentielles](#312-fonctions-essentielles)
+      - [3.1.3 Exemple `Behavior.step`](#313-exemple-behaviorstep)
+      - [3.1.4 Règles de qualité](#314-règles-de-qualité)
+  - [4. Proposition C : traitement au cas par cas](#4-proposition-c--traitement-au-cas-par-cas)
+  - [5. Résumé et critères de choix](#5-résumé-et-critères-de-choix)
+  - [6. Préserver l'indépendance de KerML](#6-préserver-lindépendance-de-kerml)
+  - [7. Périmètre, inventaire et décisions](#7-périmètre-inventaire-et-décisions)
+    - [7.1 Méthode de l'inventaire cible](#71-méthode-de-linventaire-cible)
+    - [7.2 Inventaire des 291 propriétés dérivées à annoter](#72-inventaire-des-291-propriétés-dérivées-à-annoter)
+      - [7.2.1 KerML](#721-kerml)
+      - [7.2.2 SysML](#722-sysml)
+    - [7.3 Points de discussion](#73-points-de-discussion)
 
 ## 1. Le sens de « dérivé »
 
@@ -115,6 +117,8 @@ Chaque `Membership` porte ensuite l'élément qui devient membre :
   </ownedAttribute>
 </packagedElement>
 ```
+
+![Chaîne de dérivation de `Behavior.step`](media/exemple-1-chaine-derivation.png)
 
 Lecture : `Namespace.membership` est elle-même dérivée (`isDerived="true"`) et déclarée comme union dérivée (`isDerivedUnion="true"`) des memberships possédées et importées. La formule de dérivation de `Namespace.member` part ensuite de cette collection dérivée et suit `Membership.memberElement`. Le commentaire XMI de `Namespace.member` le dit explicitement : « the `memberElements` of all `memberships` ».
 
